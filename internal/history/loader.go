@@ -31,13 +31,13 @@ func (s *Store) LoadSnapshot(ctx context.Context, commit gitutil.Commit, idx *in
 	var commitID int64
 	err = tx.QueryRowContext(ctx, `
 INSERT INTO commits(hash, short_hash, message, author_name, author_email,
-                    author_time, parent_hashes, tree_hash, indexed_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    author_time, parent_hashes, tree_hash, indexed_at, sequence)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id`,
 		commit.Hash, commit.ShortHash, commit.Message,
 		commit.AuthorName, commit.AuthorEmail,
 		commit.AuthorTime.Unix(), string(parentJSON),
-		commit.TreeHash, now,
+		commit.TreeHash, now, commit.Sequence,
 	).Scan(&commitID)
 	if err != nil {
 		return fmt.Errorf("insert commit %s: %w", commit.ShortHash, err)
@@ -112,8 +112,8 @@ INSERT OR IGNORE INTO commit_packages(commit_id, package_id) VALUES (?, ?)`)
 // Returns a map from file stable_id → integer file ID.
 func loadFiles(ctx context.Context, tx *sql.Tx, commitID int64, files []indexer.File) (map[string]int64, error) {
 	fileStmt, err := tx.PrepareContext(ctx, `
-INSERT INTO files(stable_id, path, package_id, size, line_count, sha256, language, build_tags_json, content_hash)
-VALUES (?, ?, (SELECT id FROM packages WHERE stable_id = ?), ?, ?, ?, ?, ?, '')
+INSERT INTO files(stable_id, path, package_id, size, line_count, sha256, language, build_tags_json)
+VALUES (?, ?, (SELECT id FROM packages WHERE stable_id = ?), ?, ?, ?, ?, ?)
 ON CONFLICT(stable_id, sha256) DO NOTHING
 RETURNING id`)
 	if err != nil {
@@ -368,4 +368,3 @@ func upsertPkg(ctx context.Context, insertStmt, lookupStmt *sql.Stmt, p indexer.
 	}
 	return id, err
 }
-

@@ -21,6 +21,7 @@ func newIndexCmd() *cobra.Command {
 		parallelism  int
 		incremental  bool
 		docsOnly     bool
+		strictDocs   bool
 	)
 
 	cmd := &cobra.Command{
@@ -90,6 +91,7 @@ Examples:
 				Parallelism:  parallelism,
 				Incremental:  incremental,
 				DocsOnly:     docsOnly,
+				StrictDocs:   strictDocs,
 				OnProgress: func(phase string, done, total int, detail string) {
 					fmt.Fprintf(os.Stderr, "  [%s %d/%d] %s\n", phase, done, total, detail)
 				},
@@ -123,6 +125,7 @@ Examples:
 	cmd.Flags().IntVar(&parallelism, "parallelism", 1, "Max concurrent worktrees for multi-commit indexing")
 	cmd.Flags().BoolVar(&incremental, "incremental", false, "Append to existing database instead of recreating it")
 	cmd.Flags().BoolVar(&docsOnly, "docs-only", false, "Only re-index markdown docs, skip commit indexing (requires existing DB)")
+	cmd.Flags().BoolVar(&strictDocs, "strict-docs", false, "Fail if markdown review docs contain unresolved codebase-* directives")
 
 	_ = cmd.MarkFlagRequired("docs")
 

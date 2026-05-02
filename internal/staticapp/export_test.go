@@ -63,7 +63,7 @@ func TestExportCopiesDBWritesManifestAndOmitsLegacyRuntimeFiles(t *testing.T) {
 func TestAddRenderedReviewDocsCreatesStaticTableOnCopiedDB(t *testing.T) {
 	ctx := context.Background()
 	dbPath := createStaticAppFixtureDB(t, true)
-	if err := AddRenderedReviewDocs(ctx, dbPath, t.TempDir()); err != nil {
+	if err := AddRenderedReviewDocs(ctx, dbPath, t.TempDir(), false); err != nil {
 		t.Fatalf("AddRenderedReviewDocs() error = %v", err)
 	}
 
@@ -102,12 +102,12 @@ func createStaticAppFixtureDB(t *testing.T, withReviewDoc bool) string {
 	defer store.Close()
 	db := store.DB()
 	if _, err := db.Exec(`
-		INSERT INTO commits(hash, short_hash, message, author_name, author_email, author_time, parent_hashes, tree_hash, indexed_at, branch, error)
-		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaa', 'fixture', 'Test', 'test@example.com', 100, '[]', '', 100, '', '');
+		INSERT INTO commits(hash, short_hash, message, author_name, author_email, author_time, parent_hashes, tree_hash, indexed_at, sequence, branch, error)
+		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaa', 'fixture', 'Test', 'test@example.com', 100, '[]', '', 100, 1, '', '');
 		INSERT INTO packages(stable_id, import_path, name, doc, language)
 		VALUES ('pkg:fixture', 'fixture', 'fixture', '', 'go');
-		INSERT INTO files(stable_id, path, package_id, size, line_count, sha256, language, build_tags_json, content_hash)
-		VALUES ('file:fixture.go', 'fixture.go', 1, 12, 1, 'hash-fixture', 'go', '[]', 'hash-fixture');
+		INSERT INTO files(stable_id, path, package_id, size, line_count, sha256, language, build_tags_json)
+		VALUES ('file:fixture.go', 'fixture.go', 1, 12, 1, 'hash-fixture', 'go', '[]');
 		INSERT INTO file_contents(content_hash, content)
 		VALUES ('hash-fixture', CAST('package fixture' AS BLOB));
 		INSERT INTO commit_packages(commit_id, package_id) VALUES (1, 1);

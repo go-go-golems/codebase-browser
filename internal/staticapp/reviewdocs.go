@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"strings"
 	"time"
 
 	"github.com/wesen/codebase-browser/internal/docs"
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS static_review_rendered_docs (
 // AddRenderedReviewDocs renders review markdown into HTML and stores the result
 // inside the exported SQLite database. This keeps markdown/directive resolution
 // in Go while making the static browser read review pages through sql.js.
-func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string) error {
+func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string, strict bool) error {
 	store, err := review.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("open copied DB: %w", err)
@@ -39,6 +39,10 @@ func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string) error {
 	loaded, err := review.LoadLatestSnapshot(ctx, store)
 	if err != nil {
 		return fmt.Errorf("load latest snapshot: %w", err)
+	}
+	latestHash, err := review.LatestCommitHash(ctx, store.DB())
+	if err != nil {
+		return fmt.Errorf("load latest commit hash: %w", err)
 	}
 
 	rows, err := store.DB().QueryContext(ctx, `
@@ -71,7 +75,7 @@ func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string) error {
 		return err
 	}
 
-	sourceFS := os.DirFS(repoRoot)
+	sourceFS := review.NewSnapshotFS(ctx, store.DB(), latestHash)
 	renderedAt := time.Now().Unix()
 	for _, doc := range reviewDocs {
 		slug, title, content := doc.slug, doc.title, doc.content
@@ -82,6 +86,9 @@ func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string) error {
 		if renderErr != nil {
 			errorsJSON = mustJSON([]string{renderErr.Error()})
 		} else {
+			if strict && len(page.Errors) > 0 {
+				return fmt.Errorf("render doc %s: %d directive error(s): %s", slug, len(page.Errors), strings.Join(page.Errors, "; "))
+			}
 			html = page.HTML
 			if page.Title != "" {
 				title = page.Title

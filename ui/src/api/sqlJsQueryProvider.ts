@@ -31,6 +31,7 @@ type CommitRowSQL = SqlRow & {
   AuthorEmail: string;
   AuthorTime: number;
   IndexedAt: number;
+  Sequence: number;
   Branch: string;
   Error: string;
 };
@@ -313,11 +314,12 @@ export class SqlJsQueryProvider {
              author_email AS AuthorEmail,
              author_time AS AuthorTime,
              indexed_at AS IndexedAt,
+             sequence AS Sequence,
              branch AS Branch,
              error AS Error
       FROM commits
       WHERE error = ''
-      ORDER BY author_time DESC
+      ORDER BY sequence DESC, author_time DESC
     `).map((row) => ({ ...row }));
   }
 
@@ -325,7 +327,7 @@ export class SqlJsQueryProvider {
     const commits = await this.listCommits();
     if (commits.length === 0) throw new QueryError('NOT_FOUND', 'no indexed commits in database');
 
-    const ordered = [...commits].sort((a, b) => a.AuthorTime - b.AuthorTime);
+    const ordered = [...commits].sort((a, b) => (a.Sequence - b.Sequence) || (a.AuthorTime - b.AuthorTime));
     const newestIndex = ordered.length - 1;
     if (!ref || ref === 'HEAD') return ordered[newestIndex].Hash;
 
@@ -572,7 +574,7 @@ export class SqlJsQueryProvider {
     const db = await this.getDb();
     const row = queryOne<FileContentMetaSQL>(db, `
       SELECT id AS fileId,
-             COALESCE(NULLIF(content_hash, ''), sha256) AS contentHash
+             sha256 AS contentHash
       FROM snapshot_files
       WHERE commit_hash = ? AND path = ?
     `, [commit, path]);
@@ -592,7 +594,7 @@ export class SqlJsQueryProvider {
              s.file_id AS fileId,
              s.signature AS signature,
              f.path AS filePath,
-             COALESCE(NULLIF(f.content_hash, ''), f.sha256) AS contentHash
+             f.sha256 AS contentHash
       FROM snapshot_symbols s
       JOIN snapshot_files f
         ON f.commit_hash = s.commit_hash

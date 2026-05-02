@@ -10,6 +10,7 @@ export interface CommitRow {
   AuthorEmail: string;
   AuthorTime: number;
   IndexedAt: number;
+  Sequence: number;
   Branch: string;
   Error: string;
 }

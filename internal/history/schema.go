@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS commit_refs;
 DROP TABLE IF EXISTS commit_symbols;
 DROP TABLE IF EXISTS commit_files;
 DROP TABLE IF EXISTS commit_packages;
+DROP TABLE IF EXISTS schema_info;
 DROP TABLE IF EXISTS ref_versions;
 DROP TABLE IF EXISTS symbols;
 DROP TABLE IF EXISTS files;
@@ -34,11 +35,13 @@ CREATE TABLE commits (
     parent_hashes TEXT NOT NULL DEFAULT '[]',
     tree_hash TEXT NOT NULL DEFAULT '',
     indexed_at INTEGER NOT NULL DEFAULT 0,
+    sequence INTEGER NOT NULL DEFAULT 0,
     branch TEXT NOT NULL DEFAULT '',
     error TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX idx_commits_hash ON commits(hash);
 CREATE INDEX idx_commits_author_time ON commits(author_time);
+CREATE INDEX idx_commits_sequence ON commits(sequence);
 
 -- Packages: one row per unique package across all commits.
 CREATE TABLE packages (
@@ -62,7 +65,6 @@ CREATE TABLE files (
     sha256 TEXT NOT NULL,
     language TEXT NOT NULL DEFAULT 'go',
     build_tags_json TEXT NOT NULL DEFAULT '[]',
-    content_hash TEXT NOT NULL DEFAULT '',
     UNIQUE(stable_id, sha256)
 );
 CREATE INDEX idx_files_sha ON files(sha256);
@@ -115,6 +117,14 @@ CREATE TABLE file_contents (
     content_hash TEXT PRIMARY KEY,
     content BLOB NOT NULL
 );
+
+CREATE TABLE schema_info (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+INSERT INTO schema_info(key, value) VALUES
+    ('history_schema_version', '2'),
+    ('review_schema_version', '2');
 
 -- ----------------------------------------
 -- Commit mapping tables (which version is in which commit)
@@ -172,8 +182,7 @@ SELECT
     f.line_count,
     f.sha256,
     f.language,
-    f.build_tags_json,
-    f.content_hash
+    f.build_tags_json
 FROM commit_files cf
 JOIN commits c ON c.id = cf.commit_id
 JOIN files f ON f.id = cf.file_id

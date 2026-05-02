@@ -23,9 +23,9 @@ type Options struct {
 	DBPath           string
 	OutDir           string
 	RepoRoot         string
-	IncludeSource    bool
 	BuildSPA         bool
 	RenderReviewDocs bool
+	StrictDocs       bool
 }
 
 // Export writes a static sql.js application bundle to Options.OutDir.
@@ -63,17 +63,8 @@ func Export(ctx context.Context, opts Options) error {
 
 	if opts.RenderReviewDocs {
 		fmt.Fprintln(os.Stderr, "Rendering review docs into SQLite...")
-		if err := AddRenderedReviewDocs(ctx, dbOutPath, opts.RepoRoot); err != nil {
+		if err := AddRenderedReviewDocs(ctx, dbOutPath, opts.RepoRoot, opts.StrictDocs); err != nil {
 			return fmt.Errorf("render review docs: %w", err)
-		}
-	}
-
-	if opts.IncludeSource {
-		fmt.Fprintln(os.Stderr, "Copying source tree...")
-		sourceSrc := filepath.Join(opts.RepoRoot, "internal", "sourcefs", "embed", "source")
-		sourceDst := filepath.Join(opts.OutDir, "source")
-		if err := copyTree(sourceSrc, sourceDst); err != nil {
-			return fmt.Errorf("copy source tree: %w", err)
 		}
 	}
 
@@ -124,7 +115,6 @@ func buildManifest(ctx context.Context, opts Options, dbOutPath string) (*Manife
 			CodebaseBrowser: true,
 			ReviewDocs:      commits.hasReviewDocs,
 			LLMDatabase:     true,
-			SourceTree:      opts.IncludeSource,
 		},
 		Repo: RepoManifest{
 			RootLabel: filepath.Base(absOrClean(opts.RepoRoot)),
@@ -160,8 +150,8 @@ func inspectCommits(ctx context.Context, dbPath string) (*commitInspection, erro
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM commits WHERE error = ''`).Scan(&out.count); err != nil {
 		return nil, fmt.Errorf("count commits: %w", err)
 	}
-	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY author_time ASC LIMIT 1`).Scan(&out.oldest)
-	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY author_time DESC LIMIT 1`).Scan(&out.newest)
+	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY sequence ASC, author_time ASC LIMIT 1`).Scan(&out.oldest)
+	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY sequence DESC, author_time DESC LIMIT 1`).Scan(&out.newest)
 
 	var reviewCount int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM review_docs`).Scan(&reviewCount); err == nil {

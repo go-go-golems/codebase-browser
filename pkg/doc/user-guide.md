@@ -158,7 +158,7 @@ SELECT s1.name, s1.signature AS old, s2.signature AS new
 FROM snapshot_symbols s1
 JOIN snapshot_symbols s2 ON s1.id = s2.id
 WHERE s1.commit_hash = (SELECT hash FROM commits ORDER BY author_time ASC LIMIT 1)
-  AND s2.commit_hash = (SELECT hash FROM commits ORDER BY author_time DESC LIMIT 1)
+  AND s2.commit_hash = (SELECT hash FROM commits ORDER BY sequence DESC, author_time DESC LIMIT 1)
   AND s1.signature != s2.signature;
 ```
 
@@ -167,7 +167,7 @@ WHERE s1.commit_hash = (SELECT hash FROM commits ORDER BY author_time ASC LIMIT 
 ```sql
 SELECT s.name, s.kind, s.signature
 FROM snapshot_symbols s
-WHERE s.commit_hash = (SELECT hash FROM commits ORDER BY author_time DESC LIMIT 1)
+WHERE s.commit_hash = (SELECT hash FROM commits ORDER BY sequence DESC, author_time DESC LIMIT 1)
   AND s.id NOT IN (
     SELECT id FROM snapshot_symbols
     WHERE commit_hash = (SELECT hash FROM commits ORDER BY author_time ASC LIMIT 1)
@@ -182,7 +182,7 @@ FROM snapshot_refs r
 JOIN snapshot_symbols s ON s.id = r.from_symbol_id
   AND s.commit_hash = r.commit_hash
 WHERE r.to_symbol_id = 'sym:github.com/foo/bar.func.Target'
-  AND r.commit_hash = (SELECT hash FROM commits ORDER BY author_time DESC LIMIT 1);
+  AND r.commit_hash = (SELECT hash FROM commits ORDER BY sequence DESC, author_time DESC LIMIT 1);
 ```
 
 ## Workflow tips
@@ -193,7 +193,7 @@ WHERE r.to_symbol_id = 'sym:github.com/foo/bar.func.Target'
 2. Run `review index --commits RANGE --docs ./reviews/ --db review.db`.
 3. Run `review export --db review.db --out ./review-static`.
 4. Serve `./review-static` with a static file server.
-5. Edit the markdown, re-run `review index`, re-run `review export`, and refresh the browser.
+5. Edit the markdown, re-run `review index --docs-only --docs ./reviews/ --db review.db`, re-run `review export`, and refresh the browser.
 
 ### Team reviews
 
@@ -221,6 +221,8 @@ so database size grows sub-linearly with commit count. A 250-commit range
 for a medium Go project (80+ packages) typically produces a 5–7 MB database.
 
 Multi-commit ranges automatically use git worktrees so each source/symbol/ref snapshot matches its commit.
+
+Add `--strict-docs` to `review index` or `review export` in CI when unresolved `codebase-*` directives should fail the command instead of being stored as render errors in the review page.
 
 ## Troubleshooting
 

@@ -24,7 +24,6 @@ type FeatureManifest struct {
 	CodebaseBrowser bool `json:"codebaseBrowser"`
 	ReviewDocs      bool `json:"reviewDocs"`
 	LLMDatabase     bool `json:"llmDatabase"`
-	SourceTree      bool `json:"sourceTree"`
 }
 
 type RepoManifest struct {

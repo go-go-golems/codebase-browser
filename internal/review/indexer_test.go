@@ -21,7 +21,7 @@ func TestIndexDocUpdatesExistingDocAndSnippetCount(t *testing.T) {
 	store, sourceRoot, loaded := setupDocIndexTest(t, ctx)
 
 	docPath := writeReviewDoc(t, sourceRoot, "review.md", "Original")
-	snippets, err := indexDoc(ctx, store, docPath, loaded, os.DirFS(sourceRoot))
+	snippets, err := indexDoc(ctx, store, docPath, loaded, os.DirFS(sourceRoot), false)
 	if err != nil {
 		t.Fatalf("index doc first time: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestIndexDocUpdatesExistingDocAndSnippetCount(t *testing.T) {
 	}
 
 	docPath = writeReviewDoc(t, sourceRoot, "review.md", "Edited")
-	snippets, err = indexDoc(ctx, store, docPath, loaded, os.DirFS(sourceRoot))
+	snippets, err = indexDoc(ctx, store, docPath, loaded, os.DirFS(sourceRoot), false)
 	if err != nil {
 		t.Fatalf("index doc second time: %v", err)
 	}

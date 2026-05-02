@@ -44,29 +44,29 @@
 
 ## Full architecture review follow-up tasks (from review 03)
 
-- [ ] F1: Make `internal/staticapp/reviewdocs.go` use DB-backed snapshot content instead of `os.DirFS(repoRoot)`.
-- [ ] F2: Add direct `browser.LoadIndex(*indexer.Index)` API and remove JSON roundtrip in `LoadLatestSnapshot`.
-- [ ] F3: Decide whether `files.content_hash` should be removed or populated with `sha256`; update views/docs accordingly.
-- [ ] F4: Add a schema version table inside the SQLite DB.
+- [x] F1: Make `internal/staticapp/reviewdocs.go` use DB-backed snapshot content instead of `os.DirFS(repoRoot)`.
+- [x] F2: Add direct `browser.LoadIndex(*indexer.Index)` API and remove JSON roundtrip in `LoadLatestSnapshot`.
+- [x] F3: Decide whether `files.content_hash` should be removed or populated with `sha256`; update views/docs accordingly.
+- [x] F4: Add a schema version table inside the SQLite DB.
 - [ ] F5: Add browser-query benchmarks for `snapshot_refs` expansion under sql.js-like workloads.
 - [ ] F6: Refactor normalized loader upsert helpers to reduce hand-counted SQL argument lists.
 - [ ] F7: Split file-content caching into read/hash outside the SQLite writer lock and insert inside a short critical section.
-- [ ] F8: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors.
-- [ ] F9: Clarify, rename, or replace `review export --include-source` for external repos.
+- [x] F8: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors.
+- [x] F9: Clarify, rename, or replace `review export --include-source` for external repos.
 - [ ] F10: Revisit default package patterns; consider `./...`, warnings, or an `--all-packages` shortcut.
 
 ## Priority cleanup tasks requested after review (clarity over compatibility)
 
 ### 1.x Address now / before considering GCB-017 done
 
-- [ ] P1.1: Make static export review-doc rendering use the same DB-backed snapshot source as `review index` (no live checkout reads in `internal/staticapp/reviewdocs.go`).
-- [ ] P1.2: Remove the ambiguous `files.content_hash` column and `snapshot_files.content_hash` projection; use `files.sha256` as the single content key everywhere.
-- [ ] P1.3: Replace `author_time`-based latest snapshot selection with an explicit indexed sequence/range-order column, and use one helper for latest commit lookup.
-- [ ] P1.4: Remove or rename `review export --include-source`; prefer deleting the misleading external-repo behavior over preserving compatibility.
+- [x] P1.1: Make static export review-doc rendering use the same DB-backed snapshot source as `review index` (no live checkout reads in `internal/staticapp/reviewdocs.go`).
+- [x] P1.2: Remove the ambiguous `files.content_hash` column and `snapshot_files.content_hash` projection; use `files.sha256` as the single content key everywhere.
+- [x] P1.3: Replace `author_time`-based latest snapshot selection with an explicit indexed sequence/range-order column, and use one helper for latest commit lookup.
+- [x] P1.4: Remove or rename `review export --include-source`; prefer deleting the misleading external-repo behavior over preserving compatibility.
 
 ### 2.x High-value soon
 
-- [ ] P2.1: Add `browser.LoadIndex(*indexer.Index)` and remove the JSON marshal/unmarshal roundtrip in `review.LoadLatestSnapshot`.
-- [ ] P2.2: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors for CI/export reliability.
+- [x] P2.1: Add `browser.LoadIndex(*indexer.Index)` and remove the JSON marshal/unmarshal roundtrip in `review.LoadLatestSnapshot`.
+- [x] P2.2: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors for CI/export reliability.
 - [ ] P2.3: Refactor normalized loader upserts to reduce duplicated insert-or-lookup code and hand-counted SQL arguments.
-- [ ] P2.4: Add a simple schema metadata/version table for clarity, not legacy migration compatibility.
+- [x] P2.4: Add a simple schema metadata/version table for clarity, not legacy migration compatibility.

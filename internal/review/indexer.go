@@ -26,6 +26,7 @@ type IndexOptions struct {
 	Parallelism  int
 	OnProgress   func(phase string, done, total int, detail string)
 	SkipDocs     bool
+	StrictDocs   bool
 
 	// Incremental skips commits that are already present in the database.
 	// The store must be opened with Open (not Create) so existing data is
@@ -65,6 +66,10 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 		commits, err := gitutil.LogCommits(ctx, opts.RepoRoot, opts.CommitRange)
 		if err != nil {
 			return nil, fmt.Errorf("parse commit range %q: %w", opts.CommitRange, err)
+		}
+
+		for i := range commits {
+			commits[i].Sequence = len(commits) - i
 		}
 
 		// ── Phase 2: index commits ──
@@ -144,18 +149,18 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 	if err != nil {
 		return nil, fmt.Errorf("load latest snapshot: %w", err)
 	}
-	latestHash, err := latestCommitHash(ctx, store.DB())
+	latestHash, err := LatestCommitHash(ctx, store.DB())
 	if err != nil {
 		return nil, fmt.Errorf("load latest commit hash: %w", err)
 	}
 
 	// Use indexed file contents for snippet slicing. Symbol ranges and source
 	// bytes must come from the same snapshot; the live checkout may have moved.
-	sourceFS := snapshotFS{db: store.DB(), commitHash: latestHash}
+	sourceFS := NewSnapshotFS(ctx, store.DB(), latestHash)
 
 	// ── Phase 4: index each markdown file ──
 	for i, path := range docPaths {
-		snippetCount, err := indexDoc(ctx, store, path, loaded, sourceFS)
+		snippetCount, err := indexDoc(ctx, store, path, loaded, sourceFS, opts.StrictDocs)
 		if err != nil {
 			result.Errors = append(result.Errors, IndexError{
 				Phase:  "doc",
@@ -203,7 +208,7 @@ func discoverDocs(paths []string) ([]string, error) {
 // indexDoc reads a markdown file, renders it to resolve snippets, and stores both.
 // Each doc is wrapped in a transaction so that stale snippet cleanup and
 // re-insert are atomic.
-func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Loaded, sourceFS fs.FS) (int, error) {
+func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Loaded, sourceFS fs.FS, strict bool) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err
@@ -214,6 +219,9 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 	page, err := docs.Render(slug, data, loaded, sourceFS)
 	if err != nil {
 		return 0, fmt.Errorf("render doc: %w", err)
+	}
+	if strict && len(page.Errors) > 0 {
+		return 0, fmt.Errorf("render doc %s: %d directive error(s): %s", slug, len(page.Errors), strings.Join(page.Errors, "; "))
 	}
 
 	frontmatter := "{}"

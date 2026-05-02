@@ -18,8 +18,14 @@ import (
 // the selected snapshot instead of reading potentially changed files from the
 // live working tree.
 type snapshotFS struct {
+	ctx        context.Context
 	db         *sql.DB
 	commitHash string
+}
+
+// NewSnapshotFS returns an fs.FS backed by indexed file contents for commitHash.
+func NewSnapshotFS(ctx context.Context, db *sql.DB, commitHash string) fs.FS {
+	return snapshotFS{ctx: ctx, db: db, commitHash: commitHash}
 }
 
 func (s snapshotFS) Open(name string) (fs.File, error) {
@@ -29,7 +35,11 @@ func (s snapshotFS) Open(name string) (fs.File, error) {
 	}
 
 	var content []byte
-	err := s.db.QueryRowContext(context.Background(), `
+	ctx := s.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := s.db.QueryRowContext(ctx, `
 SELECT fc.content
 FROM snapshot_files f
 JOIN file_contents fc ON fc.content_hash = f.sha256
@@ -75,9 +85,11 @@ func (i snapshotFileInfo) ModTime() time.Time { return time.Time{} }
 func (i snapshotFileInfo) IsDir() bool        { return false }
 func (i snapshotFileInfo) Sys() any           { return nil }
 
-func latestCommitHash(ctx context.Context, db *sql.DB) (string, error) {
+// LatestCommitHash returns the latest commit according to explicit review
+// sequence. Author time is only a tie-breaker for equal sequence values.
+func LatestCommitHash(ctx context.Context, db *sql.DB) (string, error) {
 	var hash string
-	if err := db.QueryRowContext(ctx, `SELECT hash FROM commits ORDER BY author_time DESC LIMIT 1`).Scan(&hash); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT hash FROM commits ORDER BY sequence DESC, author_time DESC LIMIT 1`).Scan(&hash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", fmt.Errorf("no commits in review database")
 		}

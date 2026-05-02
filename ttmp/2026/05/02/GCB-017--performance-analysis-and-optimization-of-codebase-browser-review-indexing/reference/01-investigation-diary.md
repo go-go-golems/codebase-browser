@@ -782,3 +782,33 @@ Added priority cleanup tasks P1.1-P1.4 and P2.1-P2.4 to `tasks.md`, reflecting t
 - For `files.content_hash`, the task is now to remove the column/projection and use `sha256` as the single content key, rather than keeping both populated.
 - For `review export --include-source`, the task is to remove or rename the misleading behavior rather than preserve the external-repo-incompatible flag.
 - For schema metadata, the goal is explicitness for the new clean-cutover schema, not supporting old schema migrations.
+
+## Step 13: Clarity-first P1 cleanup implementation
+
+### Prompt Context
+
+**User prompt (verbatim):** "go ahead" / "continue"
+
+This authorized implementing the prioritized P1.x cleanup tasks and nearby high-value P2.x tasks that were added after the architecture review.
+
+### What changed
+
+- Completed P1.1/F1: `internal/staticapp/reviewdocs.go` no longer reads source from `os.DirFS(repoRoot)`. Export-time review rendering now uses `review.NewSnapshotFS(ctx, db, latestHash)`, so snippets are sliced from the indexed SQLite snapshot just like `review index`.
+- Completed P1.2/F3: removed the ambiguous `files.content_hash` column and removed `snapshot_files.content_hash` from the view. The only file content key is now `files.sha256`, joined to `file_contents.content_hash`.
+- Completed P1.3: added `commits.sequence`, populated it during review indexing, indexed it, and changed latest-commit helpers/export/browser ordering to use `sequence DESC, author_time DESC`.
+- Completed P1.4/F9: removed `review export --include-source`, removed `staticapp.Options.IncludeSource`, and removed the manifest `features.sourceTree` flag.
+- Completed P2.1/F2: added `browser.LoadIndex(*indexer.Index)` and changed `review.LoadLatestSnapshot` to avoid the JSON marshal/unmarshal roundtrip.
+- Completed P2.2/F8: added `--strict-docs` to `review index` and `review export`; strict mode fails when rendered review docs contain unresolved directive errors.
+- Completed P2.4/F4: added a simple `schema_info` key/value table with history/review schema version entries.
+- Updated docs and embedded source snapshots for the changed schema and CLI behavior.
+
+### Validation
+
+- `GOWORK=off go test ./...` → pass
+- `pnpm -C ui run typecheck` → pass
+- `pnpm -C ui test -- --run src/api/sqlJsQueryProvider.test.ts` → pass (Vitest also ran related sql/highlight tests; all passed)
+- Searched for removed concepts: no remaining `include-source`, `IncludeSource`, `SourceTree`, `sourceTree`, `files.content_hash`, `snapshot_files.content_hash`, or `ORDER BY author_time DESC LIMIT 1` references in active docs/source.
+
+### Notes
+
+This is a clean-cutover change. Existing review databases with the previous schema are not supported by this code path, matching the stated preference for clarity over compatibility. The remaining high-value cleanup is P2.3/F6: refactor the normalized loader upsert helpers to reduce duplicated SQL and hand-counted argument lists.

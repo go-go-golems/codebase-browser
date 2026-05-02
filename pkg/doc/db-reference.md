@@ -59,6 +59,7 @@ One row per indexed commit.
 | `parent_hashes` | TEXT | JSON array of parent SHAs |
 | `tree_hash` | TEXT | Git tree hash |
 | `indexed_at` | INTEGER | When the row was inserted |
+| `sequence` | INTEGER | Explicit review-range order; larger means later/latest |
 | `branch` | TEXT | Branch name (if supplied) |
 | `error` | TEXT | Empty unless indexing failed |
 
@@ -90,7 +91,6 @@ One row per unique file version (keyed by `stable_id` + `sha256`).
 | `sha256` | TEXT | File content hash |
 | `language` | TEXT | `"go"` or `"ts"` |
 | `build_tags_json` | TEXT | JSON array of build tags |
-| `content_hash` | TEXT | References `file_contents` |
 
 #### `symbols`
 
@@ -173,13 +173,24 @@ Deduplicated file content blobs (keyed by SHA-256).
 | `content_hash` | TEXT PK | SHA-256 of content |
 | `content` | BLOB | Raw file bytes |
 
+### Schema metadata
+
+#### `schema_info`
+
+Small key/value metadata table for identifying the clean-cut schema version in exported or source review databases.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `key` | TEXT PK | Metadata key, e.g. `history_schema_version` |
+| `value` | TEXT | Metadata value |
+
 ### Views (compatibility layer)
 
 The `snapshot_packages`, `snapshot_files`, `snapshot_symbols`, and `snapshot_refs` views recreate the old "one row per (commit, entity)" table shape by joining mapping tables with base tables. The browser's SQL queries use these views.
 
 **`snapshot_packages`** — joins `commit_packages → packages`, projecting `commits.hash` as `commit_hash` and `packages.stable_id` as `id`.
 
-**`snapshot_files`** — joins `commit_files → files`, projecting integer IDs back to stable string IDs.
+**`snapshot_files`** — joins `commit_files → files`, projecting integer IDs back to stable string IDs. File content is joined via `sha256 = file_contents.content_hash`.
 
 **`snapshot_symbols`** — joins `commit_symbols → symbols`, projecting all symbol columns with `commit_hash` and stable string IDs.
 
@@ -245,7 +256,7 @@ One row per rendered review document in the exported browser database (`db/codeb
 ```sql
 SELECT short_hash, message, author_name, datetime(author_time, 'unixepoch') AS date
 FROM commits
-ORDER BY author_time DESC;
+ORDER BY sequence DESC, author_time DESC;
 ```
 
 ### Find symbols whose signatures changed between the first and last commit
@@ -288,7 +299,7 @@ FROM snapshot_refs r
 JOIN snapshot_symbols s ON s.id = r.from_symbol_id AND s.commit_hash = r.commit_hash
 JOIN snapshot_files f ON f.id = s.file_id AND f.commit_hash = s.commit_hash
 WHERE r.to_symbol_id = 'sym:github.com/foo/bar.func.Target'
-  AND r.commit_hash = (SELECT hash FROM commits ORDER BY author_time DESC LIMIT 1);
+  AND r.commit_hash = (SELECT hash FROM commits ORDER BY sequence DESC, author_time DESC LIMIT 1);
 ```
 
 ### List review documents and their snippet counts

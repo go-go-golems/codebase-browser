@@ -20,6 +20,7 @@ async function withProvider<T>(fn: (provider: SqlJsQueryProvider, db: Database) 
         author_email TEXT NOT NULL,
         author_time INTEGER NOT NULL,
         indexed_at INTEGER NOT NULL,
+        sequence INTEGER NOT NULL DEFAULT 0,
         branch TEXT NOT NULL,
         error TEXT NOT NULL
       )
@@ -34,9 +35,9 @@ async function withProvider<T>(fn: (provider: SqlJsQueryProvider, db: Database) 
 function insertCommit(db: Database, hash: string, shortHash: string, authorTime: number, error = ''): void {
   db.run(
     `INSERT INTO commits (
-      hash, short_hash, message, author_name, author_email, author_time, indexed_at, branch, error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [hash, shortHash, `message ${shortHash}`, 'Author', 'author@example.test', authorTime, authorTime + 1000, 'main', error],
+      hash, short_hash, message, author_name, author_email, author_time, indexed_at, sequence, branch, error
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [hash, shortHash, `message ${shortHash}`, 'Author', 'author@example.test', authorTime, authorTime + 1000, authorTime, 'main', error],
   );
 }
 
