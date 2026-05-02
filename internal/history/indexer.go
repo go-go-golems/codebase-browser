@@ -65,8 +65,19 @@ func indexWithWorktrees(ctx context.Context, store *Store, opts IndexOptions) *I
 		workers = 1
 	}
 
+	recordError := func(commit gitutil.Commit, err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		result.Errors = append(result.Errors, IndexError{
+			ShortHash: commit.ShortHash,
+			Message:   commit.Message,
+			Err:       err,
+		})
+		result.Failed++
+	}
+
 	type commitJob struct {
-		index int
+		index  int
 		commit gitutil.Commit
 	}
 
@@ -82,72 +93,56 @@ func indexWithWorktrees(ctx context.Context, store *Store, opts IndexOptions) *I
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				commit := job.commit
+				func() {
+					commit := job.commit
 
-				// Create worktree.
-				wt, err := gitutil.CreateWorktree(ctx, opts.RepoRoot, commit.Hash)
-				if err != nil {
-					mu.Lock()
-					result.Errors = append(result.Errors, IndexError{
-						ShortHash: commit.ShortHash,
-						Message:   commit.Message,
-						Err:       fmt.Errorf("worktree: %w", err),
+					// Create worktree.
+					wt, err := gitutil.CreateWorktree(ctx, opts.RepoRoot, commit.Hash)
+					if err != nil {
+						recordError(commit, fmt.Errorf("worktree: %w", err))
+						return
+					}
+					defer func() {
+						_ = gitutil.RemoveWorktree(context.Background(), opts.RepoRoot, wt)
+					}()
+
+					// Extract index from worktree (CPU-heavy, runs in parallel).
+					idx, err := indexer.Extract(indexer.ExtractOptions{
+						ModuleRoot:   wt,
+						Patterns:     opts.Patterns,
+						IncludeTests: opts.IncludeTests,
 					})
-					result.Failed++
-					mu.Unlock()
-					return
-				}
-				defer func() {
-					_ = gitutil.RemoveWorktree(context.Background(), opts.RepoRoot, wt)
+					if err != nil {
+						recordError(commit, fmt.Errorf("extract: %w", err))
+						return
+					}
+
+					// Load snapshot and cache file contents with serialized SQLite writes.
+					mu.Lock()
+					defer mu.Unlock()
+					if err := store.LoadSnapshot(ctx, commit, idx, wt); err != nil {
+						result.Errors = append(result.Errors, IndexError{
+							ShortHash: commit.ShortHash,
+							Message:   commit.Message,
+							Err:       fmt.Errorf("load: %w", err),
+						})
+						result.Failed++
+						return
+					}
+					if err := CacheFileContents(ctx, store, commit.Hash, wt); err != nil {
+						result.Errors = append(result.Errors, IndexError{
+							ShortHash: commit.ShortHash,
+							Message:   commit.Message,
+							Err:       fmt.Errorf("cache file contents: %w", err),
+						})
+						result.Failed++
+						return
+					}
+					result.Indexed++
+					if opts.OnProgress != nil {
+						opts.OnProgress(result.Indexed, len(opts.Commits), commit.ShortHash, commit.Message)
+					}
 				}()
-
-				// Extract index from worktree (CPU-heavy, runs in parallel).
-				idx, err := indexer.Extract(indexer.ExtractOptions{
-					ModuleRoot:   wt,
-					Patterns:     opts.Patterns,
-					IncludeTests: opts.IncludeTests,
-				})
-				if err != nil {
-					mu.Lock()
-					result.Errors = append(result.Errors, IndexError{
-						ShortHash: commit.ShortHash,
-						Message:   commit.Message,
-						Err:       fmt.Errorf("extract: %w", err),
-					})
-					result.Failed++
-					mu.Unlock()
-					return
-				}
-
-				// Load snapshot into history store (serialized writes).
-				mu.Lock()
-				if err := store.LoadSnapshot(ctx, commit, idx, wt); err != nil {
-					result.Errors = append(result.Errors, IndexError{
-						ShortHash: commit.ShortHash,
-						Message:   commit.Message,
-						Err:       fmt.Errorf("load: %w", err),
-					})
-					result.Failed++
-					mu.Unlock()
-					return
-				}
-				result.Indexed++
-				if opts.OnProgress != nil {
-					opts.OnProgress(result.Indexed, len(opts.Commits), commit.ShortHash, commit.Message)
-				}
-				mu.Unlock()
-
-				// Cache file contents (serialized to avoid write contention).
-				mu.Lock()
-				if err := CacheFileContents(ctx, store, commit.Hash, wt); err != nil {
-					result.Errors = append(result.Errors, IndexError{
-						ShortHash: commit.ShortHash,
-						Message:   commit.Message,
-						Err:       fmt.Errorf("cache file contents: %w", err),
-					})
-					result.Failed++
-				}
-				mu.Unlock()
 			}
 		}()
 	}

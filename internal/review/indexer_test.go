@@ -2,6 +2,8 @@ package review
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/wesen/codebase-browser/internal/browser"
 	"github.com/wesen/codebase-browser/internal/gitutil"
+	"github.com/wesen/codebase-browser/internal/history"
 	"github.com/wesen/codebase-browser/internal/indexer"
 )
 
@@ -60,6 +63,42 @@ func TestIndexDocUpdatesExistingDocAndSnippetCount(t *testing.T) {
 	}
 	if !strings.Contains(content, "Edited") {
 		t.Fatalf("expected updated content, got %q", content)
+	}
+}
+
+func TestIndexReviewDocsOnlyUsesIndexedContentNotLiveCheckout(t *testing.T) {
+	ctx := context.Background()
+	store, sourceRoot, _ := setupDocIndexTest(t, ctx)
+
+	// Move the live checkout forward after indexing. Docs-only rendering should
+	// still slice the source bytes stored in file_contents for the indexed commit.
+	changed := "package test\n\nfunc Target() {\n\tprintln(\"changed live checkout\")\n}\n"
+	if err := os.WriteFile(filepath.Join(sourceRoot, "target.go"), []byte(changed), 0o644); err != nil {
+		t.Fatalf("change live source: %v", err)
+	}
+	docPath := writeReviewDoc(t, sourceRoot, "review.md", "DB backed")
+
+	result, err := IndexReview(ctx, store, IndexOptions{
+		RepoRoot:  sourceRoot,
+		DocsPaths: []string{docPath},
+		DocsOnly:  true,
+	})
+	if err != nil {
+		t.Fatalf("docs-only index: %v", err)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("unexpected indexing errors: %+v", result.Errors)
+	}
+
+	var text string
+	if err := store.DB().QueryRowContext(ctx, `SELECT text FROM review_doc_snippets LIMIT 1`).Scan(&text); err != nil {
+		t.Fatalf("read snippet: %v", err)
+	}
+	if strings.Contains(text, "changed live checkout") {
+		t.Fatalf("snippet used live checkout content: %q", text)
+	}
+	if !strings.Contains(text, "hello") {
+		t.Fatalf("snippet did not use indexed content: %q", text)
 	}
 }
 
@@ -153,6 +192,9 @@ func loadTestSnapshot(t *testing.T, ctx context.Context, store *Store, sourceRoo
 		AuthorEmail: "test@example.com",
 		AuthorTime:  time.Now(),
 	}
+	hash := sha256.Sum256([]byte(fileContent))
+	sha := hex.EncodeToString(hash[:])
+
 	idx := &indexer.Index{
 		Version: "1",
 		Module:  "github.com/test/module",
@@ -169,7 +211,7 @@ func loadTestSnapshot(t *testing.T, ctx context.Context, store *Store, sourceRoo
 			PackageID: "pkg:github.com/test/module",
 			Size:      len(fileContent),
 			LineCount: strings.Count(fileContent, "\n"),
-			SHA256:    "test-sha",
+			SHA256:    sha,
 			Language:  "go",
 		}},
 		Symbols: []indexer.Symbol{{
@@ -192,6 +234,9 @@ func loadTestSnapshot(t *testing.T, ctx context.Context, store *Store, sourceRoo
 	}
 	if err := store.History.LoadSnapshot(ctx, commit, idx, sourceRoot); err != nil {
 		t.Fatalf("load snapshot: %v", err)
+	}
+	if err := history.CacheFileContents(ctx, store.History, commit.Hash, sourceRoot); err != nil {
+		t.Fatalf("cache file contents: %v", err)
 	}
 }
 

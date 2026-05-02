@@ -144,9 +144,14 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 	if err != nil {
 		return nil, fmt.Errorf("load latest snapshot: %w", err)
 	}
+	latestHash, err := latestCommitHash(ctx, store.DB())
+	if err != nil {
+		return nil, fmt.Errorf("load latest commit hash: %w", err)
+	}
 
-	// The source FS is the repo root.
-	sourceFS := os.DirFS(opts.RepoRoot)
+	// Use indexed file contents for snippet slicing. Symbol ranges and source
+	// bytes must come from the same snapshot; the live checkout may have moved.
+	sourceFS := snapshotFS{db: store.DB(), commitHash: latestHash}
 
 	// ── Phase 4: index each markdown file ──
 	for i, path := range docPaths {

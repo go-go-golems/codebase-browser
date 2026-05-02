@@ -710,3 +710,26 @@ This removes the root cause of the FK confusion. The code no longer trusts `Last
 - Fix `--patterns` flag/docs mismatch.
 - Fix worker-pool cleanup/error handling.
 - Clean accidental artifacts and run a final full gofmt/test pass.
+
+## Step 10: Completed docs-only correctness, source snapshot, flag, and worker cleanup
+
+### What I changed
+
+- Added `snapshotFS`, an `fs.FS` backed by `snapshot_files` + `file_contents`, so markdown snippet rendering reads the same bytes that produced the indexed symbol offsets.
+- Switched docs rendering in `IndexReview` from `os.DirFS(opts.RepoRoot)` to the DB-backed `snapshotFS` for the latest indexed commit.
+- Added a test proving docs-only rendering uses indexed DB content even if the live checkout changes after indexing.
+- Changed review `--patterns` flags from `StringArrayVar` to `StringSliceVar`, so comma-separated examples like `--patterns ./...,./pkg/...` are valid while repeated flags still work.
+- Fixed the worktree worker pool so each worktree is removed after its job instead of at worker shutdown, and one commit failure no longer terminates the worker goroutine.
+- Ran `gofmt`, targeted tests, and cleaned accidental untracked artifacts (`.git-worktrees/`, root binary, screenshot, example `lefthook.yml`).
+
+### Validation
+
+- `GOWORK=off go test ./internal/review/... ./internal/history/... ./internal/staticapp/... ./cmd/codebase-browser/...` → pass
+- Manual glazed docs-only run on two docs:
+  - command: `codebase-browser review index --db /tmp/test-docsonly-final.db --docs /tmp/glazed-bench/reviews/ --docs-only .`
+  - result: `Done in 2.987s: 0 commits, 2 docs, 14 snippets`
+  - DB counts: `config-plan-migration=6`, `help-browser-build=8`
+
+### Notes
+
+The DB-backed source FS closes the biggest correctness hole in docs-only mode. A markdown edit can now be rendered against the indexed snapshot without depending on the current working tree matching the latest indexed commit.

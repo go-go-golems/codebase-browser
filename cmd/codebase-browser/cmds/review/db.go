@@ -88,7 +88,7 @@ Examples:
 	cmd.Flags().StringVar(&dbPath, "db", "review.db", "Path to review database")
 	cmd.Flags().StringVar(&repoRoot, "repo-root", ".", "Path to git repository root")
 	cmd.Flags().StringVar(&commitRange, "commits", "", "Git log range spec (e.g. HEAD~10..HEAD)")
-	cmd.Flags().StringArrayVar(&patterns, "patterns", nil, "Go package patterns for extraction")
+	cmd.Flags().StringSliceVar(&patterns, "patterns", nil, "Go package patterns for extraction (repeat flag or comma-separate values)")
 	cmd.Flags().BoolVar(&includeTests, "include-tests", true, "Include test files")
 	cmd.Flags().IntVar(&parallelism, "parallelism", 1, "Max concurrent worktrees for multi-commit indexing")
 

@@ -37,7 +37,7 @@
 - [x] E4: Make `--docs-only` require an existing review DB instead of using `OpenOrCreate`.
 - [x] E5: Return non-zero from CLI commands when `IndexReview` accumulates errors.
 - [x] E6: Add tests for docs-only single-doc update, multi-doc update, stale snippet deletion, snippet counts, missing DB, and empty DB failure.
-- [ ] E7: Render snippets from DB-backed snapshot content instead of the live working tree.
-- [ ] E8: Fix `--patterns` behavior/docs mismatch by switching to `StringSliceVar` or documenting repeated flags only.
-- [ ] E9: Fix worker-pool worktree cleanup and per-commit failure behavior.
-- [ ] E10: Run gofmt, tests, and clean accidental artifacts.
+- [x] E7: Render snippets from DB-backed snapshot content instead of the live working tree.
+- [x] E8: Fix `--patterns` behavior/docs mismatch by switching to `StringSliceVar` or documenting repeated flags only.
+- [x] E9: Fix worker-pool worktree cleanup and per-commit failure behavior.
+- [x] E10: Run gofmt, tests, and clean accidental artifacts.
