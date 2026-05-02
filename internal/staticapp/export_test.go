@@ -104,12 +104,14 @@ func createStaticAppFixtureDB(t *testing.T, withReviewDoc bool) string {
 	if _, err := db.Exec(`
 		INSERT INTO commits(hash, short_hash, message, author_name, author_email, author_time, parent_hashes, tree_hash, indexed_at, branch, error)
 		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaa', 'fixture', 'Test', 'test@example.com', 100, '[]', '', 100, '', '');
-		INSERT INTO snapshot_packages(commit_hash, id, import_path, name, doc, language)
-		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'pkg:fixture', 'fixture', 'fixture', '', 'go');
-		INSERT INTO snapshot_files(commit_hash, id, path, package_id, size, line_count, sha256, language, build_tags_json, content_hash)
-		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'file:fixture.go', 'fixture.go', 'pkg:fixture', 12, 1, 'hash-fixture', 'go', '[]', 'hash-fixture');
+		INSERT INTO packages(stable_id, import_path, name, doc, language)
+		VALUES ('pkg:fixture', 'fixture', 'fixture', '', 'go');
+		INSERT INTO files(stable_id, path, package_id, size, line_count, sha256, language, build_tags_json, content_hash)
+		VALUES ('file:fixture.go', 'fixture.go', 1, 12, 1, 'hash-fixture', 'go', '[]', 'hash-fixture');
 		INSERT INTO file_contents(content_hash, content)
 		VALUES ('hash-fixture', CAST('package fixture' AS BLOB));
+		INSERT INTO commit_packages(commit_id, package_id) VALUES (1, 1);
+		INSERT INTO commit_files(commit_id, file_id) VALUES (1, 1);
 	`); err != nil {
 		t.Fatalf("insert fixture history rows: %v", err)
 	}
