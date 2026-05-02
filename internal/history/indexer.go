@@ -60,77 +60,99 @@ func indexWithWorktrees(ctx context.Context, store *Store, opts IndexOptions) *I
 	result := &IndexResult{}
 	var mu sync.Mutex
 
-	for i, commit := range opts.Commits {
-		func() {
-			// Create worktree.
-			wt, err := gitutil.CreateWorktree(ctx, opts.RepoRoot, commit.Hash)
-			if err != nil {
-				mu.Lock()
-				result.Errors = append(result.Errors, IndexError{
-					ShortHash: commit.ShortHash,
-					Message:   commit.Message,
-					Err:       fmt.Errorf("worktree: %w", err),
-				})
-				result.Failed++
-				mu.Unlock()
-				return
-			}
-			defer func() {
-				_ = gitutil.RemoveWorktree(context.Background(), opts.RepoRoot, wt)
-			}()
+	workers := opts.Parallelism
+	if workers < 1 {
+		workers = 1
+	}
 
-			// Extract index from worktree.
-			idx, err := indexer.Extract(indexer.ExtractOptions{
-				ModuleRoot:   wt,
-				Patterns:     opts.Patterns,
-				IncludeTests: opts.IncludeTests,
-			})
-			if err != nil {
-				mu.Lock()
-				result.Errors = append(result.Errors, IndexError{
-					ShortHash: commit.ShortHash,
-					Message:   commit.Message,
-					Err:       fmt.Errorf("extract: %w", err),
-				})
-				result.Failed++
-				mu.Unlock()
-				return
-			}
+	type commitJob struct {
+		index int
+		commit gitutil.Commit
+	}
 
-			// Load snapshot into history store.
-			if err := store.LoadSnapshot(ctx, commit, idx, wt); err != nil {
-				mu.Lock()
-				result.Errors = append(result.Errors, IndexError{
-					ShortHash: commit.ShortHash,
-					Message:   commit.Message,
-					Err:       fmt.Errorf("load: %w", err),
-				})
-				result.Failed++
-				mu.Unlock()
-				return
-			}
-			if err := CacheFileContents(ctx, store, commit.Hash, wt); err != nil {
-				mu.Lock()
-				result.Errors = append(result.Errors, IndexError{
-					ShortHash: commit.ShortHash,
-					Message:   commit.Message,
-					Err:       fmt.Errorf("cache file contents: %w", err),
-				})
-				result.Failed++
-				mu.Unlock()
-				return
-			}
+	jobs := make(chan commitJob, len(opts.Commits))
+	for i, c := range opts.Commits {
+		jobs <- commitJob{index: i, commit: c}
+	}
+	close(jobs)
 
-			mu.Lock()
-			result.Indexed++
-			if opts.OnProgress != nil {
-				opts.OnProgress(result.Indexed, len(opts.Commits), commit.ShortHash, commit.Message)
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				commit := job.commit
+
+				// Create worktree.
+				wt, err := gitutil.CreateWorktree(ctx, opts.RepoRoot, commit.Hash)
+				if err != nil {
+					mu.Lock()
+					result.Errors = append(result.Errors, IndexError{
+						ShortHash: commit.ShortHash,
+						Message:   commit.Message,
+						Err:       fmt.Errorf("worktree: %w", err),
+					})
+					result.Failed++
+					mu.Unlock()
+					return
+				}
+				defer func() {
+					_ = gitutil.RemoveWorktree(context.Background(), opts.RepoRoot, wt)
+				}()
+
+				// Extract index from worktree (CPU-heavy, runs in parallel).
+				idx, err := indexer.Extract(indexer.ExtractOptions{
+					ModuleRoot:   wt,
+					Patterns:     opts.Patterns,
+					IncludeTests: opts.IncludeTests,
+				})
+				if err != nil {
+					mu.Lock()
+					result.Errors = append(result.Errors, IndexError{
+						ShortHash: commit.ShortHash,
+						Message:   commit.Message,
+						Err:       fmt.Errorf("extract: %w", err),
+					})
+					result.Failed++
+					mu.Unlock()
+					return
+				}
+
+				// Load snapshot into history store (serialized writes).
+				mu.Lock()
+				if err := store.LoadSnapshot(ctx, commit, idx, wt); err != nil {
+					result.Errors = append(result.Errors, IndexError{
+						ShortHash: commit.ShortHash,
+						Message:   commit.Message,
+						Err:       fmt.Errorf("load: %w", err),
+					})
+					result.Failed++
+					mu.Unlock()
+					return
+				}
+				result.Indexed++
+				if opts.OnProgress != nil {
+					opts.OnProgress(result.Indexed, len(opts.Commits), commit.ShortHash, commit.Message)
+				}
+				mu.Unlock()
+
+				// Cache file contents (serialized to avoid write contention).
+				mu.Lock()
+				if err := CacheFileContents(ctx, store, commit.Hash, wt); err != nil {
+					result.Errors = append(result.Errors, IndexError{
+						ShortHash: commit.ShortHash,
+						Message:   commit.Message,
+						Err:       fmt.Errorf("cache file contents: %w", err),
+					})
+					result.Failed++
+				}
+				mu.Unlock()
 			}
-			mu.Unlock()
-			_ = i
 		}()
 	}
 
+	wg.Wait()
 	return result
 }
 
