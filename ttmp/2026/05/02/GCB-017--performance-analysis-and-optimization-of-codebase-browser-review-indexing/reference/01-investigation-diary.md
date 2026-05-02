@@ -267,3 +267,96 @@ The design document needs to be thorough enough for an intern to understand the 
 - Scripts: `ttmp/.../GCB-017/scripts/` (16 files)
 - Commit: a8d1a1d — "GCB-017: Performance analysis and design guide for review indexing"
 - reMarkable: `/ai/2026/05/02/GCB-017/GCB-017 Performance Analysis - Codebase Browser Review Indexing.pdf`
+
+## Step 4: Root-caused the worktree extraction bug
+
+Investigated why multi-commit worktree-based indexing produces empty symbol/file/ref tables. Found the root cause.
+
+### Prompt Context
+
+**User prompt (verbatim):** "what's the worktree extraction bug?"
+
+**Assistant interpretation:** Explain and root-cause the bug mentioned in the diary about empty tables from worktree-based extraction.
+
+**Inferred user intent:** Understand the actual bug, not just that it exists.
+
+### What I did
+
+1. Tested with 1 commit (indexDirect) → works perfectly (8 packages, 23 files, 88 symbols, 758 refs)
+2. Tested with 3 commits (indexWithWorktrees) → broken (3 packages with `id="pkg:./cmd/..."`, empty names, 0 files/symbols/refs)
+3. Wrote a standalone Go test program to call `packages.Load` from a git worktree
+4. Got the error: `"pattern ./cmd/...: directory prefix cmd does not contain modules listed in go.work or their selected dependencies"`
+5. Found `go.work` in the **parent directory** (`corporate-headquarters/go.work`) which lists `./codebase-browser` as a workspace module
+6. The worktree is at `.git-worktrees/<hash>` — still a subdirectory of `corporate-headquarters/`, so Go's workspace mode finds the parent `go.work` and rejects the worktree's packages
+7. Tested with `GOWORK=off` env var → **33 packages loaded correctly**
+
+### Why
+
+Go 1.18+ introduced workspace mode (`go.work`). When `packages.Load` runs from a directory, it walks upward looking for a `go.work` file. If found, it restricts package resolution to only the modules listed in `go.work`. The worktree directory (`.git-worktrees/<hash>`) isn't listed in `go.work`, so Go refuses to load its packages.
+
+### Root Cause
+
+**File:** `internal/indexer/extractor.go` line ~51 (`packages.Config` initialization)
+
+**Missing:** `Env: append(os.Environ(), "GOWORK=off")`
+
+The `packages.Config` does not set `GOWORK=off`, so when extracting from a worktree subdirectory, Go workspace mode kicks in and rejects the packages.
+
+### Fix
+
+One-line fix in `internal/indexer/extractor.go`:
+
+```go
+cfg := &packages.Config{
+    Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
+        packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo |
+        packages.NeedImports | packages.NeedModule,
+    Dir:   absRoot,
+    Fset:  token.NewFileSet(),
+    Tests: opts.IncludeTests,
+    Env:   append(os.Environ(), "GOWORK=off"), // ← ADD THIS LINE
+}
+```
+
+### What worked
+
+- Writing a standalone Go test program was the fastest way to isolate the issue
+- The error message from `packages.Load` was actually very clear once we saw it
+
+### What didn't work
+
+- The extractor silently swallows `packages.Load` errors (the "Non-fatal" comment) — this hid the real error
+- Running `go list` from the worktree worked fine because `go list` doesn't use workspace mode the same way (it has GOWORK set by the main repo's context)
+
+### What I learned
+
+- Go workspace mode (`go.work`) is inherited by child processes and `packages.Load`
+- Worktrees created inside the repo directory inherit the parent's `go.work` context
+- The single-commit path works because it uses the main working directory, which IS listed in `go.work`
+
+### What was tricky to build
+
+- N/A
+
+### What warrants a second pair of eyes
+
+- The fix (adding `GOWORK=off`) — verify this doesn't break anything in non-workspace setups
+- Should we also set `GOFLAGS=-mod=mod` for robustness?
+
+### What should be done in the future
+
+- Apply the one-line fix and test with multi-commit indexing
+- Add an integration test that indexes 3+ commits with worktrees and verifies non-empty symbol/file/ref tables
+- Consider whether the extractor should log `packages.Load` errors as warnings instead of silently continuing
+
+### Code review instructions
+
+- Look at `internal/indexer/extractor.go:51` — the `packages.Config` struct
+- The fix is adding `Env: append(os.Environ(), "GOWORK=off")`
+
+### Technical details
+
+- Error: `pattern ./cmd/...: directory prefix cmd does not contain modules listed in go.work or their selected dependencies`
+- Root cause: `corporate-headquarters/go.work` lists `./codebase-browser` but worktrees are at `.git-worktrees/<hash>` which is NOT listed
+- Fix: `GOWORK=off` in `packages.Config.Env`
+- Verified: `GOWORK=off` → 33 packages loaded correctly from worktree
