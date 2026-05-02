@@ -733,3 +733,7 @@ This removes the root cause of the FK confusion. The code no longer trusts `Last
 ### Notes
 
 The DB-backed source FS closes the biggest correctness hole in docs-only mode. A markdown edit can now be rendered against the indexed snapshot without depending on the current working tree matching the latest indexed commit.
+
+### Step 10 final validation addendum
+
+After committing `f1b09d4`, ran the full suite with `GOWORK=off go test ./...`; all packages passed. Also checked `gofmt -l` on the touched Go files and it returned no files. `git status --short` is clean.
