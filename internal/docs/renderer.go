@@ -525,71 +525,19 @@ func splitFields(s string) []string {
 	return fields
 }
 
-// resolveSymbol accepts either a full "sym:..." ID or a short form
-// "pkg/import/path.Name" / "pkg/import/path.Recv.Method". Ambiguous short
-// forms return an error so authors notice.
+// resolveSymbol accepts only full stable symbol IDs. Review documents should
+// use the exact `sym:...` IDs stored in the database and shown in browser URLs;
+// short refs were intentionally removed because they were ambiguous and made
+// examples fail when package names did not equal import paths.
 func resolveSymbol(ref string, l *browser.Loaded) (*indexer.Symbol, error) {
-	if strings.HasPrefix(ref, "sym:") {
-		sym, ok := l.Symbol(ref)
-		if !ok {
-			return nil, fmt.Errorf("symbol %s not found", ref)
-		}
-		return sym, nil
+	if !strings.HasPrefix(ref, "sym:") {
+		return nil, fmt.Errorf("symbol %q must use a full sym: ID", ref)
 	}
-	// Short form: last segment is Name (or Recv.Method), rest is importPath.
-	dot := strings.LastIndex(ref, ".")
-	if dot < 0 {
-		return nil, fmt.Errorf("bad short ref %q", ref)
+	sym, ok := l.Symbol(ref)
+	if !ok {
+		return nil, fmt.Errorf("symbol %s not found", ref)
 	}
-	importPath := ref[:dot]
-	name := ref[dot+1:]
-	// Short form "pkg.Name" addresses top-level (package-scoped) symbols
-	// only. Methods share the package ID of their receiver type, so without
-	// the filter below a ref like "internal/indexer.Extract" matches both
-	// `func Extract` and any `method X.Extract` in the same package. Force
-	// method use to go through the "pkg.Recv.Name" form handled below.
-	var candidates []*indexer.Symbol
-	for i := range l.Index.Symbols {
-		s := &l.Index.Symbols[i]
-		if s.PackageID != indexer.PackageID(importPath) {
-			continue
-		}
-		if s.Kind == "method" {
-			continue
-		}
-		if s.Name != name {
-			continue
-		}
-		candidates = append(candidates, s)
-	}
-	// Also try treating it as a method: strip the "Recv." from name.
-	if dot2 := strings.LastIndex(importPath, "."); dot2 >= 0 {
-		pkg := importPath[:dot2]
-		recv := importPath[dot2+1:]
-		for i := range l.Index.Symbols {
-			s := &l.Index.Symbols[i]
-			if s.PackageID != indexer.PackageID(pkg) {
-				continue
-			}
-			if s.Kind != "method" || s.Name != name {
-				continue
-			}
-			if s.Receiver != nil && s.Receiver.TypeName == recv {
-				candidates = append(candidates, s)
-			}
-		}
-	}
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("symbol %q not found", ref)
-	}
-	if len(candidates) > 1 {
-		ids := make([]string, len(candidates))
-		for i, c := range candidates {
-			ids[i] = c.ID
-		}
-		return nil, fmt.Errorf("ambiguous %q: %s", ref, strings.Join(ids, ", "))
-	}
-	return candidates[0], nil
+	return sym, nil
 }
 
 func dedent(s string) string {

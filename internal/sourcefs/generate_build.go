@@ -75,6 +75,7 @@ func copyFilteredTree(srcRoot, dstRoot string) error {
 			"/vendor/",
 			"/internal/indexfs/embed/",
 			"/internal/sourcefs/embed/",
+			"/internal/staticapp/embed/",
 		}
 		for _, skip := range skips {
 			if strings.Contains(norm, skip) {

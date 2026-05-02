@@ -1,5 +1,6 @@
 import { useGetDiffQuery } from '../../../api/historyApi';
 import { HistoryUnavailableNotice, isHistoryUnavailable } from './historyUnavailable';
+import { WidgetError } from './WidgetError';
 
 interface DiffStatsWidgetProps {
   from: string;
@@ -13,7 +14,7 @@ export function DiffStatsWidget({ from, to }: DiffStatsWidgetProps) {
     if (isHistoryUnavailable(error)) {
       return <HistoryUnavailableNotice widget="Diff stats" />;
     }
-    return <span data-part="error">Failed to load diff stats</span>;
+    return <WidgetError title="Failed to load diff stats" error={error} />;
   }
   if (!data) return null;
   const s = data.Stats;

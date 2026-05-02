@@ -28,11 +28,11 @@ frontend-build:
 	pnpm -C ui run build
 
 generate:
-	go generate ./cmd/... ./internal/browser ./internal/docs ./internal/indexer ./internal/indexfs ./internal/sourcefs
+	go generate ./cmd/... ./internal/browser ./internal/docs ./internal/indexer ./internal/indexfs ./internal/sourcefs ./internal/staticapp
 
 
-build: generate
-	go build -o bin/$(BINARY) ./cmd/$(BINARY)
+build: frontend-build generate
+	go build -tags embed -o bin/$(BINARY) ./cmd/$(BINARY)
 
 smoke: build
 	./bin/$(BINARY) --help >/dev/null
@@ -57,7 +57,7 @@ tidy:
 	go mod tidy
 
 clean:
-	rm -rf bin ui/dist internal/sourcefs/embed/source/* internal/indexfs/embed/index.json
+	rm -rf bin ui/dist internal/sourcefs/embed/source/* internal/indexfs/embed/index.json internal/staticapp/embed/public
 
 # Smoke-test the documentation examples.
 # Creates a temp DB with the examples/, exports it, verifies manifest.json fields,

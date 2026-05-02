@@ -329,13 +329,29 @@ export class SqlJsQueryProvider {
 
     const ordered = [...commits].sort((a, b) => (a.Sequence - b.Sequence) || (a.AuthorTime - b.AuthorTime));
     const newestIndex = ordered.length - 1;
-    if (!ref || ref === 'HEAD') return ordered[newestIndex].Hash;
+    const newest = ordered[newestIndex];
+    const oldest = ordered[0];
+    const commitContext = {
+      requestedRef: ref,
+      indexedCommitCount: ordered.length,
+      supportedHeadRefs: ordered.length === 1 ? ['HEAD'] : [`HEAD..HEAD~${ordered.length - 1}`],
+      newest: newest ? { hash: newest.Hash, shortHash: newest.ShortHash, message: newest.Message } : undefined,
+      oldest: oldest ? { hash: oldest.Hash, shortHash: oldest.ShortHash, message: oldest.Message } : undefined,
+    };
+    if (!ref || ref === 'HEAD') return newest.Hash;
 
     const headOffset = ref.match(/^HEAD~(\d+)$/);
     if (headOffset) {
-      const index = newestIndex - Number.parseInt(headOffset[1], 10);
+      const offset = Number.parseInt(headOffset[1], 10);
+      const index = newestIndex - offset;
       const commit = ordered[index];
-      if (!commit) throw new QueryError('NOT_FOUND', `commit ref not found: ${ref}`);
+      if (!commit) {
+        throw new QueryError(
+          'NOT_FOUND',
+          `commit ref ${ref} is outside this export's indexed range (${ordered.length} commit${ordered.length === 1 ? '' : 's'} available; deepest supported ref is HEAD~${ordered.length - 1})`,
+          { ...commitContext, requestedOffset: offset },
+        );
+      }
       return commit.Hash;
     }
 
@@ -344,9 +360,18 @@ export class SqlJsQueryProvider {
 
     const prefixMatches = ordered.filter((commit) => commit.Hash.startsWith(ref));
     if (prefixMatches.length === 1) return prefixMatches[0].Hash;
-    if (prefixMatches.length > 1) throw new QueryError('AMBIGUOUS_REF', `ambiguous commit ref: ${ref}`);
+    if (prefixMatches.length > 1) {
+      throw new QueryError('AMBIGUOUS_REF', `ambiguous commit ref: ${ref}`, {
+        ...commitContext,
+        matches: prefixMatches.map((commit) => ({ hash: commit.Hash, shortHash: commit.ShortHash, message: commit.Message })),
+      });
+    }
 
-    throw new QueryError('NOT_FOUND', `commit ref not found: ${ref}`);
+    throw new QueryError(
+      'NOT_FOUND',
+      `commit ref ${ref} was not found in this static export (${ordered.length} indexed commit${ordered.length === 1 ? '' : 's'})`,
+      commitContext,
+    );
   }
 
   async getCommit(ref: string): Promise<CommitRow> {

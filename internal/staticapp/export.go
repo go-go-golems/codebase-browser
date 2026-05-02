@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,18 +41,29 @@ func Export(ctx context.Context, opts Options) error {
 		opts.RepoRoot = "."
 	}
 
-	if opts.BuildSPA {
+	assets, embeddedAssets, err := spaAssetsFS()
+	if err != nil {
+		return fmt.Errorf("load SPA assets: %w", err)
+	}
+	if opts.BuildSPA && !embeddedAssets {
 		fmt.Fprintln(os.Stderr, "Building SPA...")
 		if err := buildSPA(ctx); err != nil {
 			return fmt.Errorf("build SPA: %w", err)
 		}
+		assets, embeddedAssets, err = spaAssetsFS()
+		if err != nil {
+			return fmt.Errorf("load SPA assets: %w", err)
+		}
 	}
 
 	fmt.Fprintln(os.Stderr, "Copying SPA assets...")
+	if embeddedAssets {
+		fmt.Fprintln(os.Stderr, "Using embedded SPA assets")
+	}
 	if err := os.MkdirAll(opts.OutDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
-	if err := copyTree("ui/dist/public", opts.OutDir); err != nil {
+	if err := copyFSTree(assets, ".", opts.OutDir); err != nil {
 		return fmt.Errorf("copy SPA build: %w", err)
 	}
 
@@ -172,21 +184,42 @@ func writeManifest(outDir string, manifest *Manifest) error {
 	return nil
 }
 
-func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+func copyFSTree(srcFS fs.FS, root, dst string) error {
+	return fs.WalkDir(srcFS, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, path)
+		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
+		}
+		if rel == "." {
+			rel = ""
 		}
 		target := filepath.Join(dst, rel)
-		if info.IsDir() {
+		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		return copyFile(path, target)
+		return copyFSFile(srcFS, path, target)
 	})
+}
+
+func copyFSFile(srcFS fs.FS, src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := srcFS.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 func copyFile(src, dst string) error {

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useGetDiffQuery } from '../../../api/historyApi';
+import { WidgetError } from './WidgetError';
 
 interface ChangedFilesWidgetProps {
   from: string;
@@ -12,7 +13,7 @@ export function ChangedFilesWidget({ from, to }: ChangedFilesWidgetProps) {
     return <pre data-part="code-block"><code>Loading changed files…</code></pre>;
   }
   if (error) {
-    return <div data-part="error">Failed to load changed files: {JSON.stringify(error)}</div>;
+    return <WidgetError title="Failed to load changed files" error={error} />;
   }
   const files = data?.Files ?? [];
   return (

@@ -223,6 +223,15 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 	if strict && len(page.Errors) > 0 {
 		return 0, fmt.Errorf("render doc %s: %d directive error(s): %s", slug, len(page.Errors), strings.Join(page.Errors, "; "))
 	}
+	if strict {
+		if errs := ValidatePageCommitRefs(ctx, store.DB(), page); len(errs) > 0 {
+			messages := make([]string, len(errs))
+			for i, err := range errs {
+				messages[i] = err.Error()
+			}
+			return 0, fmt.Errorf("render doc %s: %d commit-ref error(s): %s", slug, len(errs), strings.Join(messages, "; "))
+		}
+	}
 
 	frontmatter := "{}"
 	// TODO: parse YAML frontmatter from data if present

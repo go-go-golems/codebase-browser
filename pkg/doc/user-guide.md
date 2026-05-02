@@ -35,11 +35,11 @@ The `Extract` function needs to support build tag filtering.
 ## Changes
 
 ### 1. New parameter
-```codebase-diff sym=indexer.Extract from=HEAD~1 to=HEAD
+```codebase-diff sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract from=HEAD~1 to=HEAD
 ```
 
 ### 2. Updated callers
-```codebase-impact sym=indexer.Extract dir=usedby depth=2
+```codebase-impact sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract dir=usedby depth=2
 ```
 EOF
 
@@ -71,41 +71,34 @@ Review guides are regular markdown files with special fenced code blocks that th
 
 | Directive | Purpose | Example |
 |-----------|---------|---------|
-| `codebase-snippet` | Full symbol body | `` ```codebase-snippet sym=indexer.Extract``` `` |
-| `codebase-signature` | Just the signature | `` ```codebase-signature sym=indexer.Extract``` `` |
-| `codebase-doc` | Godoc/TSDoc comment | `` ```codebase-doc sym=indexer.Extract``` `` |
+| `codebase-snippet` | Full symbol body | `` ```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract``` `` |
+| `codebase-signature` | Just the signature | `` ```codebase-signature sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract``` `` |
+| `codebase-doc` | Godoc/TSDoc comment | `` ```codebase-doc sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract``` `` |
 | `codebase-file` | Whole or partial file | `` ```codebase-file path=internal/staticapp/export.go range=1-80``` `` |
-| `codebase-diff` | Symbol body diff between commits | `` ```codebase-diff sym=indexer.Extract from=HEAD~1 to=HEAD``` `` |
-| `codebase-symbol-history` | Timeline of commits touching a symbol | `` ```codebase-symbol-history sym=indexer.Merge limit=8``` `` |
-| `codebase-impact` | Transitive caller/callee list | `` ```codebase-impact sym=indexer.Extract dir=usedby depth=2``` `` |
+| `codebase-diff` | Symbol body diff between commits | `` ```codebase-diff sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract from=HEAD~1 to=HEAD``` `` |
+| `codebase-symbol-history` | Timeline of commits touching a symbol | `` ```codebase-symbol-history sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Merge limit=8``` `` |
+| `codebase-impact` | Transitive caller/callee list | `` ```codebase-impact sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract dir=usedby depth=2``` `` |
 | `codebase-commit-walk` | Guided narrative through commits | `` ```codebase-commit-walk from=HEAD~4 to=HEAD``` `` |
-| `codebase-annotation` | Inline highlights and notes | `` ```codebase-annotation sym=indexer.Extract commit=HEAD``` `` |
+| `codebase-annotation` | Inline highlights and notes | `` ```codebase-annotation sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract commit=HEAD``` `` |
 | `codebase-changed-files` | File-level diff summary | `` ```codebase-changed-files from=main to=HEAD``` `` |
 | `codebase-diff-stats` | Compact numeric summary | `` ```codebase-diff-stats from=main to=HEAD``` `` |
 
 ### Symbol references
 
-You can reference symbols using full `sym:` IDs or short forms:
+Symbols must be referenced with full `sym:` IDs:
 
 ```markdown
-Full:  sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract
-Short: indexer.Extract                    # unambiguous
-Short: indexer.Store.LoadSnapshot         # method: pkg.Recv.Method
+sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract
+sym:github.com/wesen/codebase-browser/internal/indexer.method.Store.LoadSnapshot
 ```
 
-> [!IMPORTANT]
-> **Always prefer full `sym:` IDs.** Short refs match against the package's
-> import path segment (e.g. `indexer` matches `github.com/.../indexer`), which
-> only works reliably in single-module repos. In multi-package or external
-> repos, short refs often fail silently and produce zero resolved snippets.
->
-> To discover the full symbol IDs for your repo, query the review database:
->
-> ```sql
-> sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols ORDER BY 1;"
-> ```
+Short refs such as `indexer.Extract` are intentionally not supported. They are ambiguous across packages and can look correct while pointing at no indexed symbol.
 
-Short forms fail if ambiguous (two symbols with the same name in the same package).
+To discover full symbol IDs for your repo, query the review database:
+
+```sql
+sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols ORDER BY 1;"
+```
 
 ### Commit parameters
 
@@ -113,11 +106,11 @@ Most directives accept an optional `commit=` parameter to show the symbol at a s
 
 ````markdown
 Before this PR:
-```codebase-snippet sym=indexer.Extract commit=HEAD~3
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract commit=HEAD~3
 ```
 
 After this PR:
-```codebase-snippet sym=indexer.Extract
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract
 ```
 ````
 
@@ -229,8 +222,8 @@ Add `--strict-docs` to `review index` or `review export` in CI when unresolved `
 | Problem | Cause | Solution |
 |---------|-------|----------|
 | Symbol not found in rendered doc | Commit range doesn't include the symbol | Widen `--commits` range |
-| Widget shows "doc error" | Ambiguous short ref or missing symbol | Use full `sym:` ID |
-| **0 snippets resolved** | Short symbol ref doesn't match any indexed package | Use `sym:` prefixed IDs — query the DB to find them: `sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols"` |
+| Widget shows "doc error" | Missing symbol, wrong commit range, or non-`sym:` reference | Use a full `sym:` ID and verify the symbol exists in the indexed range |
+| **0 snippets resolved** | Directives reference symbols that are not in the DB | Query the DB to find full IDs: `sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols"` |
 | **Missing packages in index** | Default `--patterns` only covers `./cmd/...` and `./internal/...` | Pass `--patterns` explicitly: `--patterns ./...,./pkg/...` |
 | Export shows no review docs | No docs in DB | Run `review index` with `--docs` before `review export` |
 | Browser cannot load sql.js | WASM asset missing from export | Confirm `sql-wasm.wasm` and `sql-wasm-browser.wasm` exist in the export root |

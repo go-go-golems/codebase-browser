@@ -89,6 +89,15 @@ func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string, strict 
 			if strict && len(page.Errors) > 0 {
 				return fmt.Errorf("render doc %s: %d directive error(s): %s", slug, len(page.Errors), strings.Join(page.Errors, "; "))
 			}
+			if strict {
+				if errs := review.ValidatePageCommitRefs(ctx, store.DB(), page); len(errs) > 0 {
+					messages := make([]string, len(errs))
+					for i, err := range errs {
+						messages[i] = err.Error()
+					}
+					return fmt.Errorf("render doc %s: %d commit-ref error(s): %s", slug, len(errs), strings.Join(messages, "; "))
+				}
+			}
 			html = page.HTML
 			if page.Title != "" {
 				title = page.Title

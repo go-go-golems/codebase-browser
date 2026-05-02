@@ -54,7 +54,8 @@ Prerequisites: Go 1.22+ and optional Docker for the hermetic Dagger build path. 
 # 1) Optional: install UI deps
 pnpm -C ui install
 
-# 2) Build the CLI
+# 2) Build the standalone CLI
+#    This builds the React UI, embeds the static assets, and compiles with -tags embed.
 make build
 
 # 3) Write a review guide with embedded widgets
@@ -123,7 +124,7 @@ For documentation on writing review guides, run:
 
 Drop a markdown file under `internal/docs/embed/pages/`. Any fenced block with an info string of `codebase-snippet`, `codebase-signature`, or `codebase-doc` is replaced at render time with the named symbol's body, signature, or godoc.
 
-**Always use full `sym:` IDs** (e.g. `sym:github.com/.../indexer.func.Extract`). Short refs like `indexer.Extract` are fragile and fail silently when the package import path doesn't match. Query the review database to discover symbol IDs:
+**Always use full `sym:` IDs** (e.g. `sym:github.com/.../indexer.func.Extract`). Short refs like `indexer.Extract` are intentionally unsupported because they are ambiguous across packages. Query the review database to discover symbol IDs:
 
 ```sql
 sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols ORDER BY 1;"

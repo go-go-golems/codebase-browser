@@ -324,7 +324,7 @@ Examples:
 - `sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract`
 - `sym:github.com/wesen/codebase-browser/internal/indexer.method.Store.LoadSnapshot`
 
-Short refs (used in markdown directives) are resolved by matching the last segment against unambiguous symbols in the given package.
+Markdown directives must use full `sym:` IDs. Short refs are intentionally unsupported because they are ambiguous across packages.
 
 ## Commit range syntax
 
@@ -345,7 +345,7 @@ The `--commits` flag accepts any git log range specification:
 | `UNIQUE constraint failed: snapshot_symbols` | Duplicate symbol IDs (e.g. blank identifiers) | Fixed in history loader — first occurrence wins |
 | `no commits in review database` | `LoadLatestSnapshot` called on empty DB | Run `review index` or `review db create` first |
 | `render doc: symbol not found` | Doc references a symbol not in indexed commits | Ensure the commit range includes the symbol |
-| **0 snippets resolved in review doc** | Short symbol ref doesn't match any package import path | Use full `sym:` IDs; query DB: `SELECT DISTINCT stable_id FROM symbols` |
+| **0 snippets resolved in review doc** | Directives reference symbols that are missing from the indexed range or are not full `sym:` IDs | Use full `sym:` IDs; query DB: `SELECT DISTINCT stable_id FROM symbols` |
 | **Fewer packages than expected** | Default `--patterns` only covers `./cmd/...` and `./internal/...` | Pass `--patterns` explicitly: `--patterns ./...,./pkg/...` |
 | Byte offsets don't match JavaScript string indices | `start_offset`/`end_offset` are byte offsets, not UTF-16 code units | Always decode `file_contents.content` bytes to a string before indexing by position |
 

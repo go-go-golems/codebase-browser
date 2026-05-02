@@ -79,9 +79,20 @@ describe('SqlJsQueryProvider commit refs', () => {
       insertCommit(db, 'abc1111111111111111111111111111111111111', 'abc1111', 100);
       insertCommit(db, 'abc2222222222222222222222222222222222222', 'abc2222', 200);
 
-      await expect(provider.resolveCommitRef('HEAD~9')).rejects.toMatchObject({ code: 'NOT_FOUND' });
-      await expect(provider.resolveCommitRef('missing')).rejects.toMatchObject({ code: 'NOT_FOUND' });
-      await expect(provider.resolveCommitRef('abc')).rejects.toMatchObject({ code: 'AMBIGUOUS_REF' });
+      await expect(provider.resolveCommitRef('HEAD~9')).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: expect.stringContaining('outside this export'),
+        details: expect.objectContaining({ indexedCommitCount: 2, requestedOffset: 9 }),
+      });
+      await expect(provider.resolveCommitRef('missing')).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+        message: expect.stringContaining('was not found in this static export'),
+        details: expect.objectContaining({ indexedCommitCount: 2 }),
+      });
+      await expect(provider.resolveCommitRef('abc')).rejects.toMatchObject({
+        code: 'AMBIGUOUS_REF',
+        details: expect.objectContaining({ indexedCommitCount: 2 }),
+      });
 
       try {
         await provider.resolveCommitRef('abc');

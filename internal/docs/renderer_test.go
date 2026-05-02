@@ -46,7 +46,7 @@ func fixtureLoaded(t *testing.T) (*browser.Loaded, fstest.MapFS) {
 
 func TestRender_Signature(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "# title\n\n```codebase-signature sym=example.com/foo.Hello\n```\n"
+	md := "# title\n\n```codebase-signature sym=sym:example.com/foo.func.Hello\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestRender_Signature(t *testing.T) {
 
 func TestRender_DocDirective(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "```codebase-doc sym=example.com/foo.Hello\n```\n"
+	md := "```codebase-doc sym=sym:example.com/foo.func.Hello\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)
@@ -74,9 +74,24 @@ func TestRender_DocDirective(t *testing.T) {
 	}
 }
 
+func TestRender_RejectsShortSymbolRef(t *testing.T) {
+	l, srcFS := fixtureLoaded(t)
+	md := "```codebase-snippet sym=example.com/foo.Hello\n```\n"
+	page, err := Render("p", []byte(md), l, srcFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Errors) == 0 {
+		t.Fatal("expected error for non-sym reference")
+	}
+	if !strings.Contains(page.Errors[0], "must use a full sym: ID") {
+		t.Fatalf("unexpected errors: %v", page.Errors)
+	}
+}
+
 func TestRender_MissingSymbol_ReportsError(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "```codebase-snippet sym=example.com/foo.Nope\n```\n"
+	md := "```codebase-snippet sym=sym:example.com/foo.func.Nope\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)
@@ -97,8 +112,8 @@ func TestFirstH1(t *testing.T) {
 
 func TestRender_EmitsHydrationStubs(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "# t\n\n```codebase-snippet sym=example.com/foo.Hello\n```\n\n" +
-		"```codebase-signature sym=example.com/foo.Hello\n```\n"
+	md := "# t\n\n```codebase-snippet sym=sym:example.com/foo.func.Hello\n```\n\n" +
+		"```codebase-signature sym=sym:example.com/foo.func.Hello\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)

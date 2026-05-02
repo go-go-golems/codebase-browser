@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { getSqlJsProvider } from './sqlJsQueryProvider';
-import { normalizeQueryError } from './queryErrors';
+import { normalizeQueryError, type ProviderError } from './queryErrors';
 
 export interface SnippetRef {
   stubId: string;
@@ -32,8 +32,6 @@ export interface ReviewDocMeta {
   slug: string;
   title: string;
 }
-
-type ProviderError = { status: string; data?: string };
 
 const noopBaseQuery: BaseQueryFn<void, unknown, ProviderError> = async () => ({ data: undefined });
 

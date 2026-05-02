@@ -837,3 +837,100 @@ This continued the remaining prioritized cleanup item P2.3/F6 after the P1 clean
 ### Notes
 
 This is a behavior-preserving cleanup. It does not alter the normalized schema; it reduces duplicated insert/lookup branches and makes the long symbol SQL argument list easier to review safely.
+
+## Step 15: Ticket closure and portable embedded static export binary
+
+### Prompt Context
+
+**User prompt (verbatim):** "ok, close the ticket. THen, buildl the standalone binary, and use that outside of the codebase directory to export a site, because I think we need to either bundle the assets or actually run the bundler using dagger or so in order to have a self contained portable binary for the codebase-browser site generation (we use dagger to do web buils in CICD, see skill)."
+
+### What changed
+
+- Closed GCB-017 with `docmgr ticket close`; docmgr warned that three non-priority follow-ups remained open, and the close was intentional.
+- Added embedded static SPA asset support for `review export`:
+  - `internal/staticapp/assets_embed.go` embeds `internal/staticapp/embed/public` when built with `-tags embed`.
+  - `internal/staticapp/assets_none.go` keeps the development fallback to `ui/dist/public`.
+  - `internal/staticapp/generate_build.go` copies `ui/dist/public` into the embed directory after the Vite build.
+  - `internal/staticapp/export.go` now skips `pnpm` when embedded assets are present and copies the SPA assets from an `fs.FS`.
+- Updated `Makefile` so `make build` runs the frontend build, runs generators including `internal/staticapp`, and builds with `-tags embed`.
+- Updated source snapshot generation to exclude `internal/staticapp/embed/` from the embedded source tree.
+
+### Validation
+
+- `GOWORK=off make build` → pass. This ran the Vite build, existing Dagger-backed TS index generation, staticapp asset generation, and `go build -tags embed`.
+- Built binary: `bin/codebase-browser`.
+- Created a fresh review DB with the built binary:
+  - `./bin/codebase-browser review index --commits HEAD~2..HEAD --docs ./examples --db /tmp/gcb-portable-review.db --parallelism 2`
+  - result: `2 commits, 4 docs, 3 snippets`.
+- Changed directory to `/tmp/gcb-portable-run` and exported using the binary outside the repo:
+  - `/home/manuel/code/wesen/corporate-headquarters/codebase-browser/bin/codebase-browser review export --db /tmp/gcb-portable-review.db --out /tmp/gcb-portable-export --repo-root codebase-browser-portable-test`
+  - output included `Using embedded SPA assets`, proving it did not run `pnpm -C ui` or read `ui/dist/public` from the current directory.
+  - verified `/tmp/gcb-portable-export/db/codebase.db` has 2 commits and 4 rendered review docs.
+
+### Notes
+
+This implements the bundled-assets branch of the portability decision. The Dagger path remains relevant for CI/build-time reproducibility: the build pipeline can run the web build before `go generate ./internal/staticapp`, then compile the portable binary with `-tags embed`.
+
+## Step 16: Remove short symbol refs
+
+### Prompt Context
+
+**User prompt (verbatim):** "remove them."
+
+This followed the portable export validation, where the example review page showed `staticapp.Export` errors even though the full symbol existed as `sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export`.
+
+### What changed
+
+- Removed short-ref resolution from `internal/docs/renderer.go`; `sym=` values must now start with `sym:`.
+- Added a renderer test that verifies non-`sym:` references are rejected with a clear error.
+- Updated renderer tests to use full stable IDs.
+- Replaced example review docs with full `sym:` IDs for `Export` and `AddRenderedReviewDocs`.
+- Updated the embedded docs page examples and public docs to describe full `sym:` IDs as the only supported symbol reference format.
+- Regenerated the embedded source snapshot so the built-in source/docs no longer contain the stale short-ref examples.
+
+### Validation
+
+- `GOWORK=off go test ./internal/docs ./internal/review ./internal/staticapp` → pass
+- `GOWORK=off go generate ./internal/sourcefs` → pass
+- `GOWORK=off go test ./...` → pass
+- `./bin/codebase-browser review index --commits HEAD~2..HEAD --docs ./examples --db /tmp/gcb-noshort.db --parallelism 2 --strict-docs` → pass, `12 snippets`
+- `GOWORK=off make build` → pass, rebuilt embedded standalone binary
+- Exported from `/tmp/gcb-portable-run` with the rebuilt binary and `--strict-docs`; output used embedded SPA assets and had zero rendered-doc errors.
+
+### Notes
+
+This is an intentional compatibility cut. The stable public contract for review markdown is now: copy a full `sym:` ID from the browser URL or query `SELECT DISTINCT stable_id FROM symbols` from the review DB.
+
+## Step 17: Runtime widget diagnostics and strict commit-ref validation
+
+### Prompt Context
+
+The regenerated example site still had runtime widget errors for `HEAD~5` on a DB that only indexed two commits. The user asked whether we could render better errors or fail at render time.
+
+### What changed
+
+- Added richer sql.js commit-ref errors in `ui/src/api/sqlJsQueryProvider.ts` with indexed commit count, supported `HEAD~N` range, newest commit, oldest commit, and ambiguous matches.
+- Added a reusable React `WidgetError` component and wired it into diff-stats and changed-files widgets so browser-side failures are actionable instead of generic messages or raw JSON.
+- Added Go-side strict validation in `internal/review/strict_docs.go` for commit refs that are normally resolved in the browser (`from=`, `to=`, `commit=`, and commit-walk step params).
+- Wired strict commit-ref validation into both `review index --strict-docs` and `review export --strict-docs`.
+- Updated example docs to use `HEAD~1` for the small two-commit demo export.
+
+### Validation
+
+- A deliberately bad doc using `HEAD~5` against a two-commit DB now fails with `--strict-docs` during `review index`:
+  - `commit ref HEAD~5 is outside this export's indexed range (2 commit(s) available; deepest supported ref is HEAD~1)`
+- `GOWORK=off go test ./...` → pass
+- `pnpm -C ui run typecheck` → pass
+- `pnpm -C ui test -- --run src/api/sqlJsQueryProvider.test.ts` → pass
+- `GOWORK=off make build` → pass; rebuilt the standalone embedded-assets binary.
+- Regenerated the original example export at `/tmp/gcb-noshort-export` using `--strict-docs` for both index and export.
+- Served the regenerated site on `http://127.0.0.1:4177/`.
+- Playwright validation of all four review docs found no `Failed`, `doc error`, `not found`, or `outside this export` text:
+  - `01-pr-review-static-export`: Resolved 3 snippets
+  - `02-symbol-history-and-impact`: Resolved 4 snippets
+  - `03-commit-walk-walkthrough`: Resolved 1 snippet
+  - `04-file-and-annotation-examples`: Resolved 4 snippets
+
+### Notes
+
+The site at `http://127.0.0.1:4177/#/review/02-symbol-history-and-impact` is now the regenerated original demo and should no longer show the `HEAD~5` errors.

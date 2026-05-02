@@ -43,3 +43,30 @@ Phase B complete: Normalized schema implemented. 50 commits: 32.3MB -> 1.4MB (23
 
 All phases complete. Design doc updated with actual results, re-uploaded to reMarkable.
 
+
+## 2026-05-02
+
+Closed after completing prioritized review indexing performance work: normalized schema, incremental and parallel indexing, docs-only hardening, snapshot-backed rendering, static export cleanup, strict docs mode, schema metadata, and loader cleanup.
+
+
+## 2026-05-02
+
+After closing the ticket, added embedded SPA assets for portable review export binaries, updated Makefile build to run frontend build plus go generate and compile with -tags embed, and verified export from /tmp outside the repo using embedded assets.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/Makefile — Build target now creates an embedded standalone binary
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/assets_embed.go — Embeds built Vite assets when compiled with -tags embed
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/export.go — Uses embedded SPA assets for portable review export
+
+
+## 2026-05-02
+
+Removed short symbol refs, added strict commit-ref validation for browser-resolved review widgets, improved widget error rendering, and regenerated the example static site with strict docs and zero rendered-doc errors.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/examples/02-symbol-history-and-impact.md — Uses commit refs present in the small example export
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/strict_docs.go — Validates from/to/commit refs during strict review indexing/export
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/WidgetError.tsx — Shows actionable widget errors with diagnostic details
+
