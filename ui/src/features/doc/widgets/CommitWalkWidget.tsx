@@ -94,6 +94,9 @@ export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWal
 function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
   const p = step.params ?? {};
   switch (step.kind) {
+    case 'overview':
+    case 'note':
+      return step.body ? <p style={{ margin: 0 }}>{step.body}</p> : <div data-part="empty">No note body.</div>;
     case 'diff-stats':
     case 'stats':
       return <DiffStatsWidget from={p.from ?? ''} to={p.to ?? ''} />;
@@ -138,6 +141,8 @@ function parseSteps(raw?: string): CommitWalkStep[] {
 }
 
 function defaultStepTitle(step: CommitWalkStep): string {
+  if (step.kind === 'overview') return 'Overview';
+  if (step.kind === 'note') return 'Note';
   if (step.kind === 'stats' || step.kind === 'diff-stats') return 'Review the size of the change';
   if (step.kind === 'files' || step.kind === 'changed-files') return 'Review changed files';
   if (step.kind === 'diff') return 'Review the symbol diff';

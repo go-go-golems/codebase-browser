@@ -46,6 +46,9 @@ export function ReviewDocPage() {
           }
         }
         if (!directive) return;
+        // codebase-file is fully rendered as a static fallback by the Go renderer.
+        // It has no symbol id to hydrate, so leave its pre-rendered code block in place.
+        if (directive === 'codebase-file') return;
         el.innerHTML = '';
         found.push({ el, sym, directive, kind, lang, commit, params });
       });

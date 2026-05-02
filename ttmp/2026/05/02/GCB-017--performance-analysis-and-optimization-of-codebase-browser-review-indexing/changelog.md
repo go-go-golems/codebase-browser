@@ -70,3 +70,13 @@ Removed short symbol refs, added strict commit-ref validation for browser-resolv
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/strict_docs.go — Validates from/to/commit refs during strict review indexing/export
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/WidgetError.tsx — Shows actionable widget errors with diagnostic details
 
+
+## 2026-05-02
+
+Fixed final review widget hydration issues: commit-walk overview steps now render as prose and codebase-file stubs keep their static rendered fallback instead of hydrating into an empty-symbol loading state.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/CommitWalkWidget.tsx — Renders overview/note commit-walk steps
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — Skips hydration for codebase-file stubs
+

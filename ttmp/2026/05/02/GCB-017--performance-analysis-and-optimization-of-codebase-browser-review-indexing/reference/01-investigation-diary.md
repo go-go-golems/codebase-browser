@@ -934,3 +934,37 @@ The regenerated example site still had runtime widget errors for `HEAD~5` on a D
 ### Notes
 
 The site at `http://127.0.0.1:4177/#/review/02-symbol-history-and-impact` is now the regenerated original demo and should no longer show the `HEAD~5` errors.
+
+## Step 18: Fix remaining review widget hydration issues
+
+### Prompt Context
+
+The user reported two remaining visible issues in the regenerated site:
+
+- `03-commit-walk-walkthrough` rendered `Unknown commit walk step kind: overview`.
+- `04-file-and-annotation-examples` stayed on `Loading…` for the file widget.
+
+### What changed
+
+- Added `overview` and `note` handling to the React `CommitWalkWidget` so prose-only steps render as notes instead of errors.
+- Stopped hydrating `codebase-file` stubs in `ReviewDocPage`; the Go renderer already emits a complete static code block for file widgets, and there is no symbol ID to hydrate. Hydrating it previously cleared the fallback and routed to symbol-snippet loading with an empty symbol.
+- Rebuilt the embedded standalone binary and regenerated `/tmp/gcb-noshort-export` with strict docs.
+
+### Validation
+
+- `pnpm -C ui run typecheck` → pass
+- `pnpm -C ui test -- --run src/api/sqlJsQueryProvider.test.ts` → pass
+- `GOWORK=off go generate ./internal/sourcefs` → pass
+- `GOWORK=off go test ./...` → pass
+- `GOWORK=off make build` → pass
+- Strict index/export of the examples → pass, 12 snippets and 0 rendered-doc errors
+- Re-served `http://127.0.0.1:4177/` from `/tmp/gcb-noshort-export`.
+- Playwright validation with a cache-busting URL confirmed all four review docs have no `Failed`, `doc error`, `not found`, `outside this export`, `Unknown commit walk step`, or `Loading…` text:
+  - `01-pr-review-static-export`: Resolved 3 snippets
+  - `02-symbol-history-and-impact`: Resolved 4 snippets
+  - `03-commit-walk-walkthrough`: Resolved 1 snippet
+  - `04-file-and-annotation-examples`: Resolved 4 snippets
+
+### Notes
+
+The first browser check after rebuilding still showed stale text until using a cache-busting query parameter (`?v=fix2`). The generated assets are correct; if a browser tab still shows the old state, hard refresh or use the cache-busted URL.
