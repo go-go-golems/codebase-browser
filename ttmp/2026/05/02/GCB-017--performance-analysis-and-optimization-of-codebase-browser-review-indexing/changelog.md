@@ -80,3 +80,12 @@ Fixed final review widget hydration issues: commit-walk overview steps now rende
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/CommitWalkWidget.tsx — Renders overview/note commit-walk steps
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — Skips hydration for codebase-file stubs
 
+
+## 2026-05-02
+
+Fixed commit-walk symbol steps and duplicate overview/note body rendering, then regenerated and revalidated the example static site.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/CommitWalkWidget.tsx — Supports symbol steps and avoids duplicated prose for overview/note steps
+

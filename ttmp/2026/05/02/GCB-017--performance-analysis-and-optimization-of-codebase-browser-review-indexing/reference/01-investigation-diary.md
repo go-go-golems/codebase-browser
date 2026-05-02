@@ -968,3 +968,29 @@ The user reported two remaining visible issues in the regenerated site:
 ### Notes
 
 The first browser check after rebuilding still showed stale text until using a cache-busting query parameter (`?v=fix2`). The generated assets are correct; if a browser tab still shows the old state, hard refresh or use the cache-busted URL.
+
+## Step 19: Fix commit-walk symbol step and duplicate note text
+
+### Prompt Context
+
+The user reported that tab 3 in the commit walk still rendered `Unknown commit walk step kind: symbol`, and that prose-only observations were duplicated in the commit-walk card.
+
+### What changed
+
+- Added `symbol` step support in `CommitWalkWidget`; it renders the same annotation-style symbol view as `snippet`/`annotation` steps.
+- Avoided rendering `body` twice for prose-only `overview` and `note` steps. The header still owns the title/body for regular widget steps, while the body-rendering step kinds now render their body only once.
+
+### Validation
+
+- `pnpm -C ui run typecheck` → pass
+- `GOWORK=off go generate ./internal/sourcefs` → pass
+- `GOWORK=off make build` → pass
+- Strict index/export of the examples → pass, 12 snippets and 0 rendered-doc errors
+- Re-served `http://127.0.0.1:4177/` from the regenerated `/tmp/gcb-noshort-export`.
+- Playwright tabbed through all 6 commit-walk steps and confirmed no `Unknown`, `Loading`, `Failed`, or `doc error` text.
+- Playwright also confirmed the `Review scope` body and `Key observation` body now appear once, not twice.
+- Full review-doc scan again passed for all four examples.
+
+### Notes
+
+Use `http://127.0.0.1:4177/?v=commitwalkfix#/review/03-commit-walk-walkthrough` if the browser has cached earlier JS assets.

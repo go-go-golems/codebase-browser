@@ -83,12 +83,16 @@ export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWal
       <article style={{ display: 'grid', gap: 12 }}>
         <header>
           <h4 style={{ margin: '0 0 4px' }}>{current.title || defaultStepTitle(current)}</h4>
-          {current.body && <p style={{ margin: 0, color: 'var(--cb-color-muted)' }}>{current.body}</p>}
+          {current.body && !isBodyRenderedByStep(current.kind) && <p style={{ margin: 0, color: 'var(--cb-color-muted)' }}>{current.body}</p>}
         </header>
         <CommitWalkStepView step={current} />
       </article>
     </section>
   );
+}
+
+function isBodyRenderedByStep(kind: string): boolean {
+  return kind === 'overview' || kind === 'note';
 }
 
 function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
@@ -103,6 +107,16 @@ function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
     case 'changed-files':
     case 'files':
       return <ChangedFilesWidget from={p.from ?? ''} to={p.to ?? ''} />;
+    case 'symbol':
+      return (
+        <AnnotationWidget
+          sym={step.symbolId ?? ''}
+          language={step.language}
+          commit={p.commit}
+          lines={p.lines}
+          note={p.note}
+        />
+      );
     case 'diff':
       return <SymbolDiffInlineWidget sym={step.symbolId ?? ''} from={p.from ?? ''} to={p.to ?? ''} />;
     case 'history': {
@@ -145,6 +159,7 @@ function defaultStepTitle(step: CommitWalkStep): string {
   if (step.kind === 'note') return 'Note';
   if (step.kind === 'stats' || step.kind === 'diff-stats') return 'Review the size of the change';
   if (step.kind === 'files' || step.kind === 'changed-files') return 'Review changed files';
+  if (step.kind === 'symbol') return 'Review symbol';
   if (step.kind === 'diff') return 'Review the symbol diff';
   if (step.kind === 'history') return 'Review symbol history';
   if (step.kind === 'impact') return 'Review impact';
