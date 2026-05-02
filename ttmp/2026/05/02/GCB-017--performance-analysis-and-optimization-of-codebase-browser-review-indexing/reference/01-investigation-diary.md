@@ -737,3 +737,28 @@ The DB-backed source FS closes the biggest correctness hole in docs-only mode. A
 ### Step 10 final validation addendum
 
 After committing `f1b09d4`, ran the full suite with `GOWORK=off go test ./...`; all packages passed. Also checked `gofmt -l` on the touched Go files and it returned no files. `git status --short` is clean.
+
+## Step 11: Full architecture/code review after optimization work
+
+### Prompt Context
+
+**User prompt (verbatim):** "Now do a full code review, in depth, of the entire work that has been done in particular because we have some more advanced optimizations going on here. Create a detailed analysis / code review / architecture review that is for a new intern... Store in the ticket and then upload to remarkable. Focus on deprecated code, obscure code, code that is unclear, things that could be better architected."
+
+### What I did
+
+- Reviewed the optimized review indexing architecture end-to-end: CLI, review orchestration, normalized history schema, loader, worktree worker pool, docs-only path, DB-backed source FS, and static export.
+- Wrote a detailed intern-oriented architecture/code review at `review/03-full-architecture-and-code-review-after-optimization.md`.
+- Added follow-up tasks F1-F10 to `tasks.md` covering static export snapshot rendering, schema versioning, loader cleanup, `snapshot_refs` benchmarking, content-hash ambiguity, strict docs, and default pattern UX.
+
+### Key findings
+
+- The largest remaining correctness issue is that `review export` still re-renders docs from `os.DirFS(repoRoot)`, while `review index` now uses DB-backed `snapshotFS`.
+- `files.content_hash` is ambiguous because the normalized loader inserts it as an empty string while `sha256` is the real content key.
+- `LoadLatestSnapshot` still performs a JSON marshal/unmarshal roundtrip to build browser lookup maps.
+- Latest commit selection uses `author_time`, which is not necessarily range order or topological order.
+- `snapshot_refs` JSON expansion is compact but should be benchmarked under browser/sql.js query patterns.
+- The worker pool is now safer, but file hashing still happens under the SQLite write mutex and can be optimized further.
+
+### Validation / next step
+
+The review document is ready for reMarkable upload. No code changed in this step other than ticket docs/tasks/diary.

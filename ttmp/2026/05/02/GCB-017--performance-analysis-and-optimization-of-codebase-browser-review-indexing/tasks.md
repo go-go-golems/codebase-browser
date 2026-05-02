@@ -41,3 +41,16 @@
 - [x] E8: Fix `--patterns` behavior/docs mismatch by switching to `StringSliceVar` or documenting repeated flags only.
 - [x] E9: Fix worker-pool worktree cleanup and per-commit failure behavior.
 - [x] E10: Run gofmt, tests, and clean accidental artifacts.
+
+## Full architecture review follow-up tasks (from review 03)
+
+- [ ] F1: Make `internal/staticapp/reviewdocs.go` use DB-backed snapshot content instead of `os.DirFS(repoRoot)`.
+- [ ] F2: Add direct `browser.LoadIndex(*indexer.Index)` API and remove JSON roundtrip in `LoadLatestSnapshot`.
+- [ ] F3: Decide whether `files.content_hash` should be removed or populated with `sha256`; update views/docs accordingly.
+- [ ] F4: Add a schema version table inside the SQLite DB.
+- [ ] F5: Add browser-query benchmarks for `snapshot_refs` expansion under sql.js-like workloads.
+- [ ] F6: Refactor normalized loader upsert helpers to reduce hand-counted SQL argument lists.
+- [ ] F7: Split file-content caching into read/hash outside the SQLite writer lock and insert inside a short critical section.
+- [ ] F8: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors.
+- [ ] F9: Clarify, rename, or replace `review export --include-source` for external repos.
+- [ ] F10: Revisit default package patterns; consider `./...`, warnings, or an `--all-packages` shortcut.
