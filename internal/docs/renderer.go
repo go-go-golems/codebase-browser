@@ -329,6 +329,12 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 		ref.Kind = "commit-walk"
 		ref.Language = "text"
 		ref.Params = map[string]string{"steps": string(stepsJSON)}
+		if from := params["from"]; from != "" {
+			ref.Params["from"] = from
+		}
+		if to := params["to"]; to != "" {
+			ref.Params["to"] = to
+		}
 		if title := params["title"]; title != "" {
 			ref.Params["title"] = title
 		}

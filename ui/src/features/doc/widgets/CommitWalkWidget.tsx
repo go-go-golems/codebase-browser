@@ -18,9 +18,11 @@ export interface CommitWalkStep {
 interface CommitWalkWidgetProps {
   title?: string;
   stepsJSON?: string;
+  from?: string;
+  to?: string;
 }
 
-export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWalkWidgetProps) {
+export function CommitWalkWidget({ title = 'Commit walk', stepsJSON, from, to }: CommitWalkWidgetProps) {
   const steps = React.useMemo(() => parseSteps(stepsJSON), [stepsJSON]);
   const [index, setIndex] = React.useState(0);
   const current = steps[index];
@@ -85,7 +87,7 @@ export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWal
           <h4 style={{ margin: '0 0 4px' }}>{current.title || defaultStepTitle(current)}</h4>
           {current.body && !isBodyRenderedByStep(current.kind) && <p style={{ margin: 0, color: 'var(--cb-color-muted)' }}>{current.body}</p>}
         </header>
-        <CommitWalkStepView step={current} />
+        <CommitWalkStepView step={current} defaultFrom={from} defaultTo={to} />
       </article>
     </section>
   );
@@ -95,8 +97,10 @@ function isBodyRenderedByStep(kind: string): boolean {
   return kind === 'overview' || kind === 'note';
 }
 
-function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
-  const p = step.params ?? {};
+function CommitWalkStepView({ step, defaultFrom, defaultTo }: { step: CommitWalkStep; defaultFrom?: string; defaultTo?: string }) {
+  const p = { ...(step.params ?? {}) };
+  if (defaultFrom && !p.from) p.from = defaultFrom;
+  if (defaultTo && !p.to) p.to = defaultTo;
   switch (step.kind) {
     case 'overview':
     case 'note':

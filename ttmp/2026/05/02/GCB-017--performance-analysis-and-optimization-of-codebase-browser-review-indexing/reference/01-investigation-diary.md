@@ -1023,3 +1023,29 @@ The user reported that `04-file-and-annotation-examples` rendered the file widge
 ### Notes
 
 Use `http://127.0.0.1:4177/?v=filewidgetfix#/review/04-file-and-annotation-examples` if the browser has cached earlier assets.
+
+## Step 21: Commit-walk default range and empty diff-stats state
+
+### Prompt Context
+
+The user asked whether the `Change summary` step in the commit walk was supposed to be empty. It showed only the title because the step did not carry `from=`/`to=` even though the enclosing `codebase-commit-walk` block did.
+
+### What changed
+
+- Preserved top-level `from=` and `to=` params on `codebase-commit-walk` snippets.
+- Passed those defaults into `CommitWalkWidget`.
+- `CommitWalkStepView` now applies the commit-walk default range to child steps that omit explicit `from=`/`to=`.
+- Added an explicit empty state to `DiffStatsWidget`: `No file or symbol changes in HEAD~1 → HEAD.` instead of rendering a row of zero chips that looks blank/ambiguous.
+
+### Validation
+
+- `pnpm -C ui run typecheck` → pass
+- `GOWORK=off go generate ./internal/sourcefs` → pass
+- `GOWORK=off make build` → pass
+- Strict index/export of examples → pass
+- Re-served `http://127.0.0.1:4177/` from regenerated `/tmp/gcb-noshort-export`.
+- Playwright clicked the commit-walk `Change summary` step and confirmed it now shows `No file or symbol changes in HEAD~1 → HEAD.` with no `Failed`, `Loading`, or `Unknown` text.
+
+### Notes
+
+The current two-commit demo range happens to have no indexed file/symbol changes for the selected indexed packages, so the correct output is an explicit zero-change message rather than numeric chips.

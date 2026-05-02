@@ -122,7 +122,7 @@ export function DocSnippet({ sym, directive, lang, commit, params, text }: DocSn
     );
   }
   if (directive === 'codebase-commit-walk') {
-    return <CommitWalkWidget title={params?.title} stepsJSON={params?.steps} />;
+    return <CommitWalkWidget title={params?.title} stepsJSON={params?.steps} from={params?.from} to={params?.to} />;
   }
   if (directive === 'codebase-signature') return <DocSignature sym={sym} commit={commit} language={lang} />;
   if (directive === 'codebase-doc') return <DocGodoc sym={sym} commit={commit} />;

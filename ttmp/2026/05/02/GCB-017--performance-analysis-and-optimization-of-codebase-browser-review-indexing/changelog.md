@@ -100,3 +100,14 @@ Fixed codebase-file formatting by hydrating file widgets from stored snippet tex
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/DocSnippet.tsx — Renders codebase-file with Code from snippet text
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — Passes stored snippet text to hydrated widgets
 
+
+## 2026-05-02
+
+Made commit-walk child steps inherit top-level from/to refs and added an explicit zero-change diff-stats state.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/docs/renderer.go — Preserves commit-walk top-level from/to params
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/CommitWalkWidget.tsx — Applies default from/to to child steps
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/DiffStatsWidget.tsx — Shows explicit no-change state
+
