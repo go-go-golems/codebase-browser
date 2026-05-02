@@ -26,5 +26,5 @@
 - [x] Phase C1: Implement worker pool in indexWithWorktrees using channel-based concurrency
 - [x] Phase C2: Serialize SQLite writes via mutex/channel in LoadSnapshot
 - [x] Phase C3: Benchmark parallelism=1 vs parallelism=4
-- [ ] Phase D1: Update design doc with actual benchmark results
-- [ ] Phase D2: Re-upload to reMarkable
+- [x] Phase D1: Update design doc with actual benchmark results
+- [x] Phase D2: Re-upload to reMarkable

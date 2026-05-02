@@ -38,3 +38,8 @@ Phase A (incremental indexing) complete: --incremental flag added, tested with 5
 
 Phase B complete: Normalized schema implemented. 50 commits: 32.3MB -> 1.4MB (23x smaller). All tests pass. Views recreate old table shapes for browser compatibility.
 
+
+## 2026-05-02
+
+All phases complete. Design doc updated with actual results, re-uploaded to reMarkable.
+
