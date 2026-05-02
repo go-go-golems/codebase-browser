@@ -49,7 +49,7 @@
 - [x] F3: Decide whether `files.content_hash` should be removed or populated with `sha256`; update views/docs accordingly.
 - [x] F4: Add a schema version table inside the SQLite DB.
 - [ ] F5: Add browser-query benchmarks for `snapshot_refs` expansion under sql.js-like workloads.
-- [ ] F6: Refactor normalized loader upsert helpers to reduce hand-counted SQL argument lists.
+- [x] F6: Refactor normalized loader upsert helpers to reduce hand-counted SQL argument lists.
 - [ ] F7: Split file-content caching into read/hash outside the SQLite writer lock and insert inside a short critical section.
 - [x] F8: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors.
 - [x] F9: Clarify, rename, or replace `review export --include-source` for external repos.
@@ -68,5 +68,5 @@
 
 - [x] P2.1: Add `browser.LoadIndex(*indexer.Index)` and remove the JSON marshal/unmarshal roundtrip in `review.LoadLatestSnapshot`.
 - [x] P2.2: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors for CI/export reliability.
-- [ ] P2.3: Refactor normalized loader upserts to reduce duplicated insert-or-lookup code and hand-counted SQL arguments.
+- [x] P2.3: Refactor normalized loader upserts to reduce duplicated insert-or-lookup code and hand-counted SQL arguments.
 - [x] P2.4: Add a simple schema metadata/version table for clarity, not legacy migration compatibility.

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -97,11 +98,14 @@ INSERT OR IGNORE INTO commit_packages(commit_id, package_id) VALUES (?, ?)`)
 	defer mapStmt.Close()
 
 	for _, p := range packages {
-		pkgID, err := upsertPkg(ctx, pkgStmt, lookupStmt, p)
+		pkgID, err := insertOrLookupID(ctx, pkgStmt, lookupStmt,
+			[]any{p.ID, p.ImportPath, p.Name, p.Doc, p.Language},
+			[]any{p.ID},
+		)
 		if err != nil {
 			return fmt.Errorf("insert package %s: %w", p.ID, err)
 		}
-		if _, err := mapStmt.ExecContext(ctx, commitID, pkgID); err != nil {
+		if err := mapEntity(ctx, mapStmt, commitID, pkgID); err != nil {
 			return fmt.Errorf("map package %s: %w", p.ID, err)
 		}
 	}
@@ -141,19 +145,15 @@ INSERT OR IGNORE INTO commit_files(commit_id, file_id) VALUES (?, ?)`)
 		if lang == "" {
 			lang = "go"
 		}
-		var fileID int64
-		err := fileStmt.QueryRowContext(ctx,
-			f.ID, f.Path, f.PackageID,
-			f.Size, f.LineCount, f.SHA256, lang, string(buildTags),
-		).Scan(&fileID)
-		if err == sql.ErrNoRows {
-			err = lookupStmt.QueryRowContext(ctx, f.ID, f.SHA256).Scan(&fileID)
-		}
+		fileID, err := insertOrLookupID(ctx, fileStmt, lookupStmt,
+			[]any{f.ID, f.Path, f.PackageID, f.Size, f.LineCount, f.SHA256, lang, string(buildTags)},
+			[]any{f.ID, f.SHA256},
+		)
 		if err != nil {
 			return nil, fmt.Errorf("insert/lookup file %s: %w", f.ID, err)
 		}
 		result[f.ID] = fileID
-		if _, err := mapStmt.ExecContext(ctx, commitID, fileID); err != nil {
+		if err := mapEntity(ctx, mapStmt, commitID, fileID); err != nil {
 			return nil, fmt.Errorf("map file %s: %w", f.ID, err)
 		}
 	}
@@ -223,25 +223,16 @@ INSERT OR IGNORE INTO commit_symbols(commit_id, symbol_id) VALUES (?, ?)`)
 
 		bodyHash := computeBodyHash(worktreeDir, sym)
 
-		var symID int64
-		// Params: stable_id, kind, name, pkg_stable_id, then 15 data fields,
-		// then commit_id, file_stable_id for the subquery.
-		err := symStmt.QueryRowContext(ctx,
-			sym.ID, sym.Kind, sym.Name, sym.PackageID,
-			sym.Range.StartLine, sym.Range.StartCol, sym.Range.EndLine, sym.Range.EndCol,
-			sym.Range.StartOffset, sym.Range.EndOffset,
-			sym.Doc, sym.Signature, receiverType, receiverPointer,
-			boolInt(sym.Exported), lang, string(typeParams), string(tags), bodyHash,
-			commitID, sym.FileID,
-		).Scan(&symID)
-		if err == sql.ErrNoRows {
-			err = lookupStmt.QueryRowContext(ctx, sym.ID, bodyHash).Scan(&symID)
-		}
+		insertArgs := symbolInsertArgs(commitID, sym, lang, receiverType, receiverPointer, string(typeParams), string(tags), bodyHash)
+		symID, err := insertOrLookupID(ctx, symStmt, lookupStmt,
+			insertArgs,
+			[]any{sym.ID, bodyHash},
+		)
 		if err != nil {
 			return nil, fmt.Errorf("insert/lookup symbol %s: %w", sym.ID, err)
 		}
 		result[sym.ID] = symID
-		if _, err := mapStmt.ExecContext(ctx, commitID, symID); err != nil {
+		if err := mapEntity(ctx, mapStmt, commitID, symID); err != nil {
 			return nil, fmt.Errorf("map symbol %s: %w", sym.ID, err)
 		}
 	}
@@ -311,19 +302,14 @@ INSERT OR IGNORE INTO commit_refs(commit_id, ref_version_id) VALUES (?, ?)`)
 
 	for key, locs := range groups {
 		locsJSON, _ := json.Marshal(locs)
-		var refID int64
-		err := refStmt.QueryRowContext(ctx,
-			key.fromSymID, key.toStable, key.kind, key.fileID, string(locsJSON),
-		).Scan(&refID)
-		if err == sql.ErrNoRows {
-			err = lookupStmt.QueryRowContext(ctx,
-				key.fromSymID, key.toStable, key.kind, key.fileID,
-			).Scan(&refID)
-		}
+		refID, err := insertOrLookupID(ctx, refStmt, lookupStmt,
+			[]any{key.fromSymID, key.toStable, key.kind, key.fileID, string(locsJSON)},
+			[]any{key.fromSymID, key.toStable, key.kind, key.fileID},
+		)
 		if err != nil {
 			return fmt.Errorf("insert/lookup ref (%d→%s %s): %w", key.fromSymID, key.toStable, key.kind, err)
 		}
-		if _, err := mapStmt.ExecContext(ctx, commitID, refID); err != nil {
+		if err := mapEntity(ctx, mapStmt, commitID, refID); err != nil {
 			return fmt.Errorf("map ref: %w", err)
 		}
 	}
@@ -359,12 +345,34 @@ func boolInt(v bool) int {
 	return 0
 }
 
-// upsertPkg inserts a package or returns the existing ID.
-func upsertPkg(ctx context.Context, insertStmt, lookupStmt *sql.Stmt, p indexer.Package) (int64, error) {
+// symbolInsertArgs centralizes the long INSERT argument order used by loadSymbols.
+// The SQL shape is:
+//   - symbol identity and package stable ID
+//   - range/metadata/body fields
+//   - commit ID and file stable ID for resolving the commit-local file version
+func symbolInsertArgs(commitID int64, sym indexer.Symbol, lang, receiverType string, receiverPointer int, typeParamsJSON, tagsJSON, bodyHash string) []any {
+	return []any{
+		sym.ID, sym.Kind, sym.Name, sym.PackageID,
+		sym.Range.StartLine, sym.Range.StartCol, sym.Range.EndLine, sym.Range.EndCol,
+		sym.Range.StartOffset, sym.Range.EndOffset,
+		sym.Doc, sym.Signature, receiverType, receiverPointer,
+		boolInt(sym.Exported), lang, typeParamsJSON, tagsJSON, bodyHash,
+		commitID, sym.FileID,
+	}
+}
+
+// insertOrLookupID executes an INSERT ... RETURNING id statement and falls back
+// to a lookup when ON CONFLICT DO NOTHING returns no row.
+func insertOrLookupID(ctx context.Context, insertStmt, lookupStmt *sql.Stmt, insertArgs, lookupArgs []any) (int64, error) {
 	var id int64
-	err := insertStmt.QueryRowContext(ctx, p.ID, p.ImportPath, p.Name, p.Doc, p.Language).Scan(&id)
-	if err == sql.ErrNoRows {
-		err = lookupStmt.QueryRowContext(ctx, p.ID).Scan(&id)
+	err := insertStmt.QueryRowContext(ctx, insertArgs...).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = lookupStmt.QueryRowContext(ctx, lookupArgs...).Scan(&id)
 	}
 	return id, err
+}
+
+func mapEntity(ctx context.Context, stmt *sql.Stmt, commitID, entityID int64) error {
+	_, err := stmt.ExecContext(ctx, commitID, entityID)
+	return err
 }

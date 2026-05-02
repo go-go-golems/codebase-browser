@@ -812,3 +812,28 @@ This authorized implementing the prioritized P1.x cleanup tasks and nearby high-
 ### Notes
 
 This is a clean-cutover change. Existing review databases with the previous schema are not supported by this code path, matching the stated preference for clarity over compatibility. The remaining high-value cleanup is P2.3/F6: refactor the normalized loader upsert helpers to reduce duplicated SQL and hand-counted argument lists.
+
+## Step 14: Normalized loader upsert cleanup
+
+### Prompt Context
+
+**User prompt (verbatim):** "continue"
+
+This continued the remaining prioritized cleanup item P2.3/F6 after the P1 cleanup commit.
+
+### What changed
+
+- Refactored repeated `INSERT ... ON CONFLICT DO NOTHING RETURNING id` plus fallback lookup logic into `insertOrLookupID`.
+- Added `mapEntity` for the repeated commit-to-entity mapping insert pattern.
+- Added `symbolInsertArgs` so the long symbol insert argument order is centralized and documented instead of being embedded inline in `loadSymbols`.
+- Applied these helpers to package, file, symbol, and ref loading in `internal/history/loader.go`.
+- Updated the embedded source snapshot and checked off P2.3/F6 in `tasks.md`.
+
+### Validation
+
+- `GOWORK=off go test ./internal/history/... ./internal/review/... ./internal/staticapp/...` → pass
+- `GOWORK=off go test ./...` → pass
+
+### Notes
+
+This is a behavior-preserving cleanup. It does not alter the normalized schema; it reduces duplicated insert/lookup branches and makes the long symbol SQL argument list easier to review safely.
