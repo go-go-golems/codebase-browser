@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useParams } from 'react-router-dom';
-import { useGetReviewDocQuery, useListReviewDocsQuery } from '../../api/docApi';
+import { useGetReviewDocQuery, useListReviewDocsQuery, type SnippetRef } from '../../api/docApi';
 import { DocSnippet } from '../doc/DocSnippet';
 
 interface StubHandle {
@@ -13,6 +13,7 @@ interface StubHandle {
   lang: string;
   commit?: string;
   params?: Record<string, string>;
+  text?: string;
 }
 
 export function ReviewDocPage() {
@@ -27,11 +28,14 @@ export function ReviewDocPage() {
       setStubs([]);
       return;
     }
+    const snippetsByStub = new Map<string, SnippetRef>((data.snippets ?? []).map((snippet) => [snippet.stubId, snippet]));
     const found: StubHandle[] = [];
     articleRef.current
       .querySelectorAll<HTMLElement>('[data-codebase-snippet]')
       .forEach((el) => {
-        const sym = el.getAttribute('data-sym') ?? '';
+        const stubId = el.getAttribute('data-stub-id') ?? '';
+        const snippet = snippetsByStub.get(stubId);
+        const sym = el.getAttribute('data-sym') ?? snippet?.symbolId ?? '';
         const directive = el.getAttribute('data-directive') ?? '';
         const kind = el.getAttribute('data-kind') ?? '';
         const lang = el.getAttribute('data-lang') ?? 'go';
@@ -46,11 +50,8 @@ export function ReviewDocPage() {
           }
         }
         if (!directive) return;
-        // codebase-file is fully rendered as a static fallback by the Go renderer.
-        // It has no symbol id to hydrate, so leave its pre-rendered code block in place.
-        if (directive === 'codebase-file') return;
         el.innerHTML = '';
-        found.push({ el, sym, directive, kind, lang, commit, params });
+        found.push({ el, sym, directive, kind, lang, commit, params: params ?? snippet?.params, text: snippet?.text });
       });
     setStubs(found);
   }, [data?.html]);
@@ -78,6 +79,7 @@ export function ReviewDocPage() {
             lang={s.lang}
             commit={s.commit}
             params={s.params}
+            text={s.text}
           />,
           s.el,
           `${slug}-${i}`,

@@ -89,3 +89,14 @@ Fixed commit-walk symbol steps and duplicate overview/note body rendering, then 
 
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/widgets/CommitWalkWidget.tsx — Supports symbol steps and avoids duplicated prose for overview/note steps
 
+
+## 2026-05-02
+
+Fixed codebase-file formatting by hydrating file widgets from stored snippet text instead of relying on markdown fallback HTML.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/DocPage.tsx — Passes stored snippet text to hydrated widgets
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/DocSnippet.tsx — Renders codebase-file with Code from snippet text
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — Passes stored snippet text to hydrated widgets
+

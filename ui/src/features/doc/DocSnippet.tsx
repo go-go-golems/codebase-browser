@@ -78,9 +78,13 @@ export interface DocSnippetProps {
   lang: string;
   commit?: string;
   params?: Record<string, string>;
+  text?: string;
 }
 
-export function DocSnippet({ sym, directive, lang, commit, params }: DocSnippetProps) {
+export function DocSnippet({ sym, directive, lang, commit, params, text }: DocSnippetProps) {
+  if (directive === 'codebase-file') {
+    return <Code text={text ?? ''} language={lang || 'text'} />;
+  }
   if (directive === 'codebase-diff') {
     return <SymbolDiffInlineWidget sym={sym} from={params?.from ?? ''} to={params?.to ?? ''} />;
   }

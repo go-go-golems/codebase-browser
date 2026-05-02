@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useParams } from 'react-router-dom';
-import { useGetDocQuery } from '../../api/docApi';
+import { useGetDocQuery, type SnippetRef } from '../../api/docApi';
 import { DocSnippet } from './DocSnippet';
 
 interface StubHandle {
@@ -13,6 +13,7 @@ interface StubHandle {
   lang: string;
   commit?: string;
   params?: Record<string, string>;
+  text?: string;
 }
 
 export function DocPage() {
@@ -32,11 +33,14 @@ export function DocPage() {
       setStubs([]);
       return;
     }
+    const snippetsByStub = new Map<string, SnippetRef>((data.snippets ?? []).map((snippet) => [snippet.stubId, snippet]));
     const found: StubHandle[] = [];
     articleRef.current
       .querySelectorAll<HTMLElement>('[data-codebase-snippet]')
       .forEach((el) => {
-        const sym = el.getAttribute('data-sym') ?? '';
+        const stubId = el.getAttribute('data-stub-id') ?? '';
+        const snippet = snippetsByStub.get(stubId);
+        const sym = el.getAttribute('data-sym') ?? snippet?.symbolId ?? '';
         const directive = el.getAttribute('data-directive') ?? '';
         const kind = el.getAttribute('data-kind') ?? '';
         const lang = el.getAttribute('data-lang') ?? 'go';
@@ -54,7 +58,7 @@ export function DocPage() {
         // single symbol, so only directive is required here.
         if (!directive) return;
         el.innerHTML = ''; // drop the plaintext fallback before React mounts
-        found.push({ el, sym, directive, kind, lang, commit, params });
+        found.push({ el, sym, directive, kind, lang, commit, params: params ?? snippet?.params, text: snippet?.text });
       });
     setStubs(found);
   }, [data?.html]);
@@ -82,6 +86,7 @@ export function DocPage() {
             lang={s.lang}
             commit={s.commit}
             params={s.params}
+            text={s.text}
           />,
           s.el,
           `${slug}-${i}`,

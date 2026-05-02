@@ -994,3 +994,32 @@ The user reported that tab 3 in the commit walk still rendered `Unknown commit w
 ### Notes
 
 Use `http://127.0.0.1:4177/?v=commitwalkfix#/review/03-commit-walk-walkthrough` if the browser has cached earlier JS assets.
+
+## Step 20: Fix file widget formatting
+
+### Prompt Context
+
+The user reported that `04-file-and-annotation-examples` rendered the file widget with broken formatting, HTML paragraph tags inside the code block, and escaped quotes such as `&#34;`.
+
+### What changed
+
+- Hydrate `codebase-file` widgets from the stored `review_doc_snippets.text` payload instead of leaving the Go-rendered markdown fallback in place.
+- Added `text` and `params` to the frontend `SnippetRef` interface.
+- Updated both review-doc and docs-page hydration paths to map snippets by `stubId`, pass the stored text into `DocSnippet`, and render `codebase-file` through the React `Code` component.
+
+### Validation
+
+- `pnpm -C ui run typecheck` → pass
+- `GOWORK=off go generate ./internal/sourcefs` → pass
+- `GOWORK=off make build` → pass
+- Strict index/export of the examples → pass, 0 rendered-doc errors
+- Re-served `http://127.0.0.1:4177/` from regenerated `/tmp/gcb-noshort-export`.
+- Playwright checked the file widget:
+  - no paragraph tags inside the `codebase-file` widget
+  - no literal `&#34;` text
+  - import block indentation and blank lines are preserved
+- Full review-doc scan again passed for all four examples.
+
+### Notes
+
+Use `http://127.0.0.1:4177/?v=filewidgetfix#/review/04-file-and-annotation-examples` if the browser has cached earlier assets.

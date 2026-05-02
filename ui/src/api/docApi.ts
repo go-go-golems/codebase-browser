@@ -10,6 +10,7 @@ export interface SnippetRef {
   kind?: string;
   language?: string;
   text: string;
+  params?: Record<string, string>;
   startLine?: number;
   endLine?: number;
 }
