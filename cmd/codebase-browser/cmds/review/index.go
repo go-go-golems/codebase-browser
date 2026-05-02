@@ -19,6 +19,7 @@ func newIndexCmd() *cobra.Command {
 		patterns     []string
 		includeTests bool
 		parallelism  int
+		incremental  bool
 	)
 
 	cmd := &cobra.Command{
@@ -55,9 +56,15 @@ Examples:
 				return fmt.Errorf("--docs is required (provide markdown files or directories)")
 			}
 
-			store, err := review.Create(dbPath)
+			var store *review.Store
+			var err error
+			if incremental {
+				store, err = review.OpenOrCreate(dbPath)
+			} else {
+				store, err = review.Create(dbPath)
+			}
 			if err != nil {
-				return fmt.Errorf("create review db: %w", err)
+				return fmt.Errorf("open review db: %w", err)
 			}
 			defer func() { _ = store.Close() }()
 
@@ -68,6 +75,7 @@ Examples:
 				Patterns:     patterns,
 				IncludeTests: includeTests,
 				Parallelism:  parallelism,
+				Incremental:  incremental,
 				OnProgress: func(phase string, done, total int, detail string) {
 					fmt.Fprintf(os.Stderr, "  [%s %d/%d] %s\n", phase, done, total, detail)
 				},
@@ -96,6 +104,7 @@ Examples:
 	cmd.Flags().StringArrayVar(&patterns, "patterns", nil, "Go package patterns for extraction")
 	cmd.Flags().BoolVar(&includeTests, "include-tests", true, "Include test files")
 	cmd.Flags().IntVar(&parallelism, "parallelism", 1, "Max concurrent worktrees for multi-commit indexing")
+	cmd.Flags().BoolVar(&incremental, "incremental", false, "Append to existing database instead of recreating it")
 
 	_ = cmd.MarkFlagRequired("docs")
 

@@ -50,6 +50,31 @@ func Create(path string) (*Store, error) {
 	return store, nil
 }
 
+// OpenOrCreate opens an existing database or creates a new one. Used by
+// incremental indexing to reuse an existing database.
+func OpenOrCreate(path string) (*Store, error) {
+	store, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	if !store.HasTables() {
+		if err := store.ResetSchema(context.Background()); err != nil {
+			_ = store.Close()
+			return nil, err
+		}
+	}
+	return store, nil
+}
+
+// HasTables returns true if the database contains the expected tables.
+func (s *Store) HasTables() bool {
+	var count int
+	err := s.db.QueryRow(`
+		SELECT COUNT(*) FROM sqlite_master
+		WHERE type='table' AND name='commits'`).Scan(&count)
+	return err == nil && count > 0
+}
+
 // DB exposes the underlying database for direct queries.
 func (s *Store) DB() *sql.DB { return s.db }
 

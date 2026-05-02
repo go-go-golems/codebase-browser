@@ -26,6 +26,12 @@ type IndexOptions struct {
 	Parallelism  int
 	OnProgress   func(phase string, done, total int, detail string)
 	SkipDocs     bool
+
+	// Incremental skips commits that are already present in the database.
+	// The store must be opened with Open (not Create) so existing data is
+	// preserved. New commits are appended; existing snapshots are not
+	// re-extracted.
+	Incremental bool
 }
 
 // IndexResult describes what the indexer did.
@@ -60,10 +66,36 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 	// each commit, not the current checkout repeated N times. The current
 	// extractor is filesystem-oriented, so use git worktrees automatically for
 	// commit ranges and keep direct indexing only for single-commit snapshots.
-	useWorktrees := len(commits) > 1
+
+	// Filter out already-indexed commits when running in incremental mode.
+	toIndex := commits
+	skipped := 0
+	if opts.Incremental {
+		var filtered []gitutil.Commit
+		for _, c := range commits {
+			present, err := store.History.HasCommit(ctx, c.Hash)
+			if err != nil {
+				return nil, fmt.Errorf("check commit %s: %w", c.ShortHash, err)
+			}
+			if present {
+				skipped++
+				continue
+			}
+			filtered = append(filtered, c)
+		}
+		toIndex = filtered
+	}
+
+	if len(toIndex) == 0 && len(commits) > 0 {
+		fmt.Fprintf(os.Stderr, "All %d commits already indexed (skipping)\n", len(commits))
+	} else if skipped > 0 {
+		fmt.Fprintf(os.Stderr, "Indexing %d new commits (skipping %d existing)\n", len(toIndex), skipped)
+	}
+
+	useWorktrees := len(toIndex) > 1
 	histOpts := history.IndexOptions{
 		RepoRoot:     opts.RepoRoot,
-		Commits:      commits,
+		Commits:      toIndex,
 		Patterns:     opts.Patterns,
 		IncludeTests: opts.IncludeTests,
 		Worktrees:    useWorktrees,
