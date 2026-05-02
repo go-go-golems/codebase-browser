@@ -543,3 +543,110 @@ The 83-commit and 123-commit ranges cover the same codebase surface (recent hist
 
 - All DB files in `/tmp/glazed-bench/`
 - Scripts: `scripts/30-glazed-benchmark.sh`, `scripts/31-glazed-db-analysis.sql`
+
+### Parallelism benchmarks on glazed
+
+The worker pool code was already implemented in `internal/history/indexer.go` (from Step 5) but the `--parallelism` flag defaults to 1. The user noticed all cores pegged during the glazed benchmarks — that was `packages.Load` internally using goroutines during single-commit AST extraction, not our worker pool.
+
+Ran benchmarks at parallelism 1, 2, 4, and 8 on the 123-commit range (HEAD~50..HEAD):
+
+| Parallelism | Wall time | Speedup | Throughput |
+|---|---|---|---|
+| p=1 (default) | 4m54s | 1.0× | 25 c/min |
+| p=2 | 57s | 5.2× | 130 c/min |
+| p=4 | 53s | 5.6× | 140 c/min |
+| p=8 | 39s | 7.5× | 189 c/min |
+
+And for the 252-commit range:
+
+| Parallelism | Wall time | Speedup |
+|---|---|---|
+| p=1 | 17m06s | 1.0× |
+| p=4 | 1m41s | **10.1×** |
+
+**Data integrity verified:** All parallelism levels produce identical row counts for every table (123 commits, 201 symbols, 1,665 ref_versions, 20,187 commit_symbols, 120,798 commit_refs).
+
+### Analysis
+
+- p=2 already gives a massive 5.2× improvement (4m54s → 57s)
+- p=4 is marginally faster than p=2 on 123 commits (53s vs 57s) — the serialized SQLite writes become the bottleneck
+- p=8 still helps (39s) because worktree creation + AST extraction are the dominant costs and overlap well
+- The 252-commit range shows a 10× speedup at p=4 (17m → 1m41s) because there's more parallelizable work
+- **Recommendation:** Change the default `--parallelism` from 1 to `runtime.NumCPU()` or at least 4
+
+### What worked
+
+- The worker pool implementation was already correct — just needed the flag to be used
+- Data integrity is perfect across all parallelism levels (mutex on SQLite writes works)
+- `commit_symbols` and `commit_refs` counts are identical across runs — no race conditions
+
+### What didn't work
+
+- The progress counter (`[commits N/123]`) isn't perfectly ordered with parallelism (commits complete out of order) — cosmetic only
+- User time exceeds wall time at p=4 (4m46s user vs 53s wall) confirming real parallelism
+
+### Technical details
+
+- Worker pool: `internal/history/indexer.go:indexWithWorktrees()`
+- Channel-based job queue, `sync.Mutex` for serialized SQLite writes
+- All benchmark DBs in `/tmp/glazed-bench/glazed-50fp-p{1,2,4,8}.db`
+- Script: `scripts/32-glazed-parallelism-benchmark.sh`
+
+## Step 7: Glazed export, doc fixes, and documentation update
+
+### Prompt Context
+
+**User prompt (verbatim):** "can you export the static version of the glazed index, maybe with a test markdown file or two?" followed by "update the documentation of the package btw, now that you've gone through the process of writing a full markdown file, to make sure the next person doing this won't run into the same issues."
+
+**Assistant interpretation:** Create real review markdown files for the glazed repo, index them, export a static browser, then update all documentation to capture the pitfalls I hit.
+
+**Inferred user intent:** Produce a working static export to validate the tool end-to-end at scale, and fix the docs so nobody hits the same symbol-resolution and schema-description issues.
+
+### What I did
+
+1. Created two review markdown files for glazed:
+   - `config-plan-migration.md` — covers PR #553 config plan migration
+   - `help-browser-build.md` — covers GL-011 help browser build pipeline
+
+2. **Hit the short-ref trap:** First versions used short symbol refs like `config-plan.func.runShow` — these failed silently (0 snippets resolved). The short-ref resolver matches against the package's full import path, not the directory name. Only `codebase-diff-stats` and `codebase-changed-files` (which use commit refs, not symbol refs) resolved.
+
+3. Fixed by switching to full `sym:` IDs (e.g. `sym:github.com/go-go-golems/glazed/cmd/examples/config-plan.func.runShow`). Re-indexed → all 14 snippets resolved.
+
+4. Exported static browser to `/tmp/glazed-bench/glazed-static2/` — 19 MB total with React SPA + sql.js + 6.8 MB database.
+
+5. Verified in browser: sidebar shows 22 packages, 168 symbols, both review docs listed. Code snippets render with syntax highlighting. Diff-stats and changed-files widgets work.
+
+6. Updated four documentation files:
+   - **`pkg/doc/db-reference.md`**: Rewrote entire history tables section to describe normalized schema (base tables, mapping tables, compatibility views) instead of the old snapshot_* tables. Added byte-offset warning to troubleshooting.
+   - **`pkg/doc/user-guide.md`**: Added `--parallelism` guidance, updated large-range section to mention normalized schema sizes, added troubleshooting for `--patterns` default and 0-snippet failures.
+   - **`pkg/doc/markdown-block-reference.md`**: Added CAUTION callout about short-ref fragility, recommend full `sym:` IDs with discovery query, added troubleshooting for `--patterns` and silent snippet skips.
+   - **`README.md`**: Updated quick start to use `sym:` IDs, mentioned `--patterns` default and `--parallelism` flag, updated "Adding a doc page" section with ID discovery query.
+
+### Key insights for documentation
+
+1. **Short refs are a trap for external repos.** They work in the codebase-browser repo itself (where `indexer` matches `internal/indexer`) but fail silently in external repos. The fix is always `sym:` prefixed IDs.
+
+2. **`--patterns` defaults to `./cmd/...,./internal/...`** — this misses `pkg/`, `web/`, and other common Go directories. External repos almost always need `--patterns ./...`.
+
+3. **Silent snippet resolution failures** are the worst UX issue. When a symbol can't be found, the directive is skipped entirely — no error, no placeholder, just 0 snippets. A future improvement would be to insert an error placeholder instead.
+
+4. **The normalized schema needs documenting.** The db-reference was describing the old `snapshot_*` tables as if they were real tables. They're now views over normalized base tables.
+
+### What worked
+
+- Full `sym:` IDs resolved all 14 snippets across both docs
+- The export pipeline (build SPA → copy assets → copy DB → render docs → write manifest) works end-to-end
+- The browser loads the 6.8 MB glazed database via sql.js without issues
+
+### What didn't work
+
+- `--include-source` flag fails on glazed because the repo doesn't have `internal/sourcefs/embed/source` — this is a codebase-browser-specific directory
+- The python http.server had issues with the playwright browser (empty responses) — used a node one-liner instead
+- The first export attempt failed because `pnpm install` hadn't been run
+
+### Technical details
+
+- Export: `/tmp/glazed-bench/glazed-static2/` (19 MB)
+- DB in export: 6.8 MB (252 commits, 372 symbols, 5935 ref versions)
+- Review docs: 2 docs, 14 resolved snippets
+- Commit: `9842ce2` — docs update
