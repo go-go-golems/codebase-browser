@@ -19,3 +19,12 @@ Created GCB-017 ticket, diary, and design document. Analyzed 264MB production da
 
 Uploaded bundled design doc + diary to reMarkable at /ai/2026/05/02/GCB-017
 
+
+## 2026-05-02
+
+Root-caused worktree extraction bug: packages.Config needs GOWORK=off when parent go.work exists. One-line fix in internal/indexer/extractor.go.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/indexer/extractor.go — packages.Config needs GOWORK=off env var for worktree extraction
+
