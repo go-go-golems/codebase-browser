@@ -85,13 +85,25 @@ Review guides are regular markdown files with special fenced code blocks that th
 
 ### Symbol references
 
-Use full `sym:` IDs or short forms:
+You can reference symbols using full `sym:` IDs or short forms:
 
 ```markdown
 Full:  sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract
 Short: indexer.Extract                    # unambiguous
 Short: indexer.Store.LoadSnapshot         # method: pkg.Recv.Method
 ```
+
+> [!IMPORTANT]
+> **Always prefer full `sym:` IDs.** Short refs match against the package's
+> import path segment (e.g. `indexer` matches `github.com/.../indexer`), which
+> only works reliably in single-module repos. In multi-package or external
+> repos, short refs often fail silently and produce zero resolved snippets.
+>
+> To discover the full symbol IDs for your repo, query the review database:
+>
+> ```sql
+> sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols ORDER BY 1;"
+> ```
 
 Short forms fail if ambiguous (two symbols with the same name in the same package).
 
@@ -194,12 +206,21 @@ For team review meetings:
 
 ### Large commit ranges
 
-For large PRs (50+ commits), the review DB can grow large because each commit stores a full snapshot. Strategies:
+For large PRs (50+ commits), use `--parallelism N` to extract multiple commits concurrently:
 
-- Multi-commit ranges automatically use git worktrees so each source/symbol/ref snapshot matches its commit.
-- Use `--parallelism N` to control how many worktrees are indexed concurrently.
-- Use a smaller range: `HEAD~20..HEAD` instead of `main..feature`.
-- The `file_contents` table deduplicates identical files across commits, so content bloat is bounded.
+```bash
+./bin/codebase-browser review index \
+  --commits HEAD~100..HEAD \
+  --docs ./reviews/ \
+  --parallelism 4 \
+  --db review.db
+```
+
+The database uses a normalized schema where each unique symbol is stored once,
+so database size grows sub-linearly with commit count. A 250-commit range
+for a medium Go project (80+ packages) typically produces a 5–7 MB database.
+
+Multi-commit ranges automatically use git worktrees so each source/symbol/ref snapshot matches its commit.
 
 ## Troubleshooting
 
@@ -207,10 +228,11 @@ For large PRs (50+ commits), the review DB can grow large because each commit st
 |---------|-------|----------|
 | Symbol not found in rendered doc | Commit range doesn't include the symbol | Widen `--commits` range |
 | Widget shows "doc error" | Ambiguous short ref or missing symbol | Use full `sym:` ID |
+| **0 snippets resolved** | Short symbol ref doesn't match any indexed package | Use `sym:` prefixed IDs — query the DB to find them: `sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols"` |
+| **Missing packages in index** | Default `--patterns` only covers `./cmd/...` and `./internal/...` | Pass `--patterns` explicitly: `--patterns ./...,./pkg/...` |
 | Export shows no review docs | No docs in DB | Run `review index` with `--docs` before `review export` |
 | Browser cannot load sql.js | WASM asset missing from export | Confirm `sql-wasm.wasm` and `sql-wasm-browser.wasm` exist in the export root |
 | Diff widget shows no changes | `from` and `to` commits have same `body_hash` | Check commit range |
-| Large `.db` file | Many commits indexed | Use narrower range or delete old `.db` |
 
 ## See Also
 

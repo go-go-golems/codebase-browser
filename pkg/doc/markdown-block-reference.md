@@ -57,7 +57,7 @@ sym:github.com/wesen/codebase-browser/internal/indexer.method.Store.LoadSnapshot
 
 ### Short symbol references
 
-Short refs omit the `sym:` prefix and import path prefix. The resolver finds the symbol by matching the name against the indexed package:
+Short refs omit the `sym:` prefix and use a `package.Name` or `package.Recv.Method` pattern. The resolver finds the symbol by matching the name against the indexed package's **import path**:
 
 ```text
 staticapp.Export          → top-level function in github.com/.../staticapp
@@ -65,7 +65,20 @@ indexer.Extract           → top-level function in github.com/.../indexer
 indexer.Store.LoadSnapshot → method on Store type in github.com/.../indexer
 ```
 
-Short refs fail if ambiguous (two symbols with the same name in the same package). Use the full ID in that case.
+> [!CAUTION]
+> Short refs are fragile. The first segment must match a **suffix** of the
+> package's full import path. For example, `indexer.Extract` matches
+> `github.com/foo/bar/internal/indexer` but NOT `github.com/foo/bar/cmd/indexer`
+> if both packages exist. In external or multi-package repos, short refs often
+> fail silently — the directive is simply skipped with no error message.
+>
+> **Recommendation:** Always use full `sym:` IDs in review markdown files.
+> Discover them with:
+> ```sql
+> sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols ORDER BY 1;"
+> ```
+
+Short refs also fail if ambiguous (two symbols with the same name in the same package). Use the full ID in that case.
 
 ### Commit parameters
 
@@ -380,6 +393,8 @@ sym:github.com/wesen/codebase-browser/internal/indexer.type.Matcher
 |---------|-------|----------|
 | Widget shows "doc error: symbol not found" | Symbol not in indexed commit range | Use `sym:` ID (not short ref) and confirm the symbol exists in `--commits` range |
 | Widget shows "doc error: ambiguous" | Short ref matches multiple symbols | Use full `sym:` ID |
+| **Directive produces no snippet (silently skipped)** | Short ref doesn't match any package import path | Use full `sym:` IDs; query DB: `SELECT DISTINCT stable_id FROM symbols` |
+| **Fewer packages than expected** | Default `--patterns` only covers `./cmd/...` and `./internal/...` | Pass `--patterns` explicitly: `--patterns ./...,./pkg/...` |
 | Diff widget shows no changes | `from` and `to` commits have same body hash for this symbol | Use `codebase-symbol-history` to find which commits actually changed the symbol |
 | File widget shows "doc error: file not in index" | File path is wrong or file was renamed | Use the correct relative path from the repo root |
 | Commit-walk shows "doc error: expected step" | DSL body has a malformed step line | Each step line must start with `step kind=...` and have `kind=` as the first parameter |
