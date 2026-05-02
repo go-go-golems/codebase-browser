@@ -77,6 +77,9 @@ Examples:
 			for _, idxErr := range result.Errors {
 				fmt.Fprintf(os.Stderr, "  ERROR %s: %v\n", idxErr.Detail, idxErr.Err)
 			}
+			if len(result.Errors) > 0 {
+				return fmt.Errorf("index completed with %d error(s)", len(result.Errors))
+			}
 
 			return nil
 		},

@@ -59,15 +59,27 @@ Examples:
 
 			var store *review.Store
 			var err error
-			if incremental || docsOnly {
+			switch {
+			case docsOnly:
+				store, err = review.Open(dbPath)
+			case incremental:
 				store, err = review.OpenOrCreate(dbPath)
-			} else {
+			default:
 				store, err = review.Create(dbPath)
 			}
 			if err != nil {
 				return fmt.Errorf("open review db: %w", err)
 			}
 			defer func() { _ = store.Close() }()
+			if docsOnly {
+				hasCommits, err := store.HasCommits(ctx)
+				if err != nil {
+					return fmt.Errorf("check existing review db: %w", err)
+				}
+				if !hasCommits {
+					return fmt.Errorf("--docs-only requires an existing review database with at least one indexed commit")
+				}
+			}
 
 			opts := review.IndexOptions{
 				RepoRoot:     repoRoot,
@@ -93,6 +105,9 @@ Examples:
 				result.DocsIndexed, result.SnippetsIndexed)
 			for _, idxErr := range result.Errors {
 				fmt.Fprintf(os.Stderr, "  ERROR %s: %v\n", idxErr.Detail, idxErr.Err)
+			}
+			if len(result.Errors) > 0 {
+				return fmt.Errorf("index completed with %d error(s)", len(result.Errors))
 			}
 
 			return nil

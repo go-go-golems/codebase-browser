@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/wesen/codebase-browser/internal/history"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/wesen/codebase-browser/internal/history"
 )
 
 // Store owns a SQLite connection for the unified review database.
@@ -73,6 +73,18 @@ func (s *Store) HasTables() bool {
 		SELECT COUNT(*) FROM sqlite_master
 		WHERE type='table' AND name='commits'`).Scan(&count)
 	return err == nil && count > 0
+}
+
+// HasCommits returns true if the database contains at least one indexed commit.
+func (s *Store) HasCommits(ctx context.Context) (bool, error) {
+	if !s.HasTables() {
+		return false, nil
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM commits`).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // DB exposes the underlying database for direct queries.

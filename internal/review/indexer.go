@@ -60,59 +60,59 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 	start := time.Now()
 	result := &IndexResult{}
 
-	// ── Phase 1: resolve commit range ──
-	commits, err := gitutil.LogCommits(ctx, opts.RepoRoot, opts.CommitRange)
-	if err != nil {
-		return nil, fmt.Errorf("parse commit range %q: %w", opts.CommitRange, err)
-	}
-
-	// ── Phase 2: index commits ──
-	// Multi-commit review databases must contain source/symbol/ref snapshots for
-	// each commit, not the current checkout repeated N times. The current
-	// extractor is filesystem-oriented, so use git worktrees automatically for
-	// commit ranges and keep direct indexing only for single-commit snapshots.
-
-	// Filter out already-indexed commits when running in incremental mode.
-	toIndex := commits
-	skipped := 0
-	if opts.Incremental {
-		var filtered []gitutil.Commit
-		for _, c := range commits {
-			present, err := store.History.HasCommit(ctx, c.Hash)
-			if err != nil {
-				return nil, fmt.Errorf("check commit %s: %w", c.ShortHash, err)
-			}
-			if present {
-				skipped++
-				continue
-			}
-			filtered = append(filtered, c)
-		}
-		toIndex = filtered
-	}
-
-	if len(toIndex) == 0 && len(commits) > 0 {
-		fmt.Fprintf(os.Stderr, "All %d commits already indexed (skipping)\n", len(commits))
-	} else if skipped > 0 {
-		fmt.Fprintf(os.Stderr, "Indexing %d new commits (skipping %d existing)\n", len(toIndex), skipped)
-	}
-
 	if !opts.DocsOnly {
+		// ── Phase 1: resolve commit range ──
+		commits, err := gitutil.LogCommits(ctx, opts.RepoRoot, opts.CommitRange)
+		if err != nil {
+			return nil, fmt.Errorf("parse commit range %q: %w", opts.CommitRange, err)
+		}
+
+		// ── Phase 2: index commits ──
+		// Multi-commit review databases must contain source/symbol/ref snapshots for
+		// each commit, not the current checkout repeated N times. The current
+		// extractor is filesystem-oriented, so use git worktrees automatically for
+		// commit ranges and keep direct indexing only for single-commit snapshots.
+
+		// Filter out already-indexed commits when running in incremental mode.
+		toIndex := commits
+		skipped := 0
+		if opts.Incremental {
+			var filtered []gitutil.Commit
+			for _, c := range commits {
+				present, err := store.History.HasCommit(ctx, c.Hash)
+				if err != nil {
+					return nil, fmt.Errorf("check commit %s: %w", c.ShortHash, err)
+				}
+				if present {
+					skipped++
+					continue
+				}
+				filtered = append(filtered, c)
+			}
+			toIndex = filtered
+		}
+
+		if len(toIndex) == 0 && len(commits) > 0 {
+			fmt.Fprintf(os.Stderr, "All %d commits already indexed (skipping)\n", len(commits))
+		} else if skipped > 0 {
+			fmt.Fprintf(os.Stderr, "Indexing %d new commits (skipping %d existing)\n", len(toIndex), skipped)
+		}
+
 		useWorktrees := len(toIndex) > 1
 		histOpts := history.IndexOptions{
 			RepoRoot:     opts.RepoRoot,
 			Commits:      toIndex,
 			Patterns:     opts.Patterns,
-		IncludeTests: opts.IncludeTests,
-		Worktrees:    useWorktrees,
-		Parallelism:  opts.Parallelism,
-		OnProgress: func(done, total int, shortHash, message string) {
-			result.CommitsIndexed = done
-			if opts.OnProgress != nil {
-				opts.OnProgress("commits", done, total, shortHash)
-			}
-		},
-	}
+			IncludeTests: opts.IncludeTests,
+			Worktrees:    useWorktrees,
+			Parallelism:  opts.Parallelism,
+			OnProgress: func(done, total int, shortHash, message string) {
+				result.CommitsIndexed = done
+				if opts.OnProgress != nil {
+					opts.OnProgress("commits", done, total, shortHash)
+				}
+			},
+		}
 
 		histResult, err := history.IndexCommits(ctx, store.History, histOpts)
 		if err != nil {
@@ -126,7 +126,7 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 				Err:    e.Err,
 			})
 		}
-	} // end !DocsOnly
+	}
 
 	if opts.SkipDocs {
 		result.Duration = time.Since(start)
@@ -150,7 +150,8 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 
 	// ── Phase 4: index each markdown file ──
 	for i, path := range docPaths {
-		if err := indexDoc(ctx, store, path, loaded, sourceFS); err != nil {
+		snippetCount, err := indexDoc(ctx, store, path, loaded, sourceFS)
+		if err != nil {
 			result.Errors = append(result.Errors, IndexError{
 				Phase:  "doc",
 				Detail: path,
@@ -159,6 +160,7 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 			continue
 		}
 		result.DocsIndexed++
+		result.SnippetsIndexed += snippetCount
 		if opts.OnProgress != nil {
 			opts.OnProgress("docs", i+1, len(docPaths), filepath.Base(path))
 		}
@@ -196,17 +198,17 @@ func discoverDocs(paths []string) ([]string, error) {
 // indexDoc reads a markdown file, renders it to resolve snippets, and stores both.
 // Each doc is wrapped in a transaction so that stale snippet cleanup and
 // re-insert are atomic.
-func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Loaded, sourceFS fs.FS) error {
+func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Loaded, sourceFS fs.FS) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	slug := strings.TrimSuffix(filepath.Base(path), ".md")
 
 	page, err := docs.Render(slug, data, loaded, sourceFS)
 	if err != nil {
-		return fmt.Errorf("render doc: %w", err)
+		return 0, fmt.Errorf("render doc: %w", err)
 	}
 
 	frontmatter := "{}"
@@ -214,11 +216,12 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 
 	tx, err := store.DB().BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return 0, fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	res, err := tx.ExecContext(ctx, `
+	var docID int64
+	if err := tx.QueryRowContext(ctx, `
 		INSERT INTO review_docs (slug, title, path, content, frontmatter_json, indexed_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(slug) DO UPDATE SET
@@ -227,40 +230,17 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 			content = excluded.content,
 			frontmatter_json = excluded.frontmatter_json,
 			indexed_at = excluded.indexed_at
-	`, slug, page.Title, path, string(data), frontmatter, time.Now().Unix())
-	if err != nil {
-		return fmt.Errorf("insert review doc: %w", err)
-	}
-
-	docID, err := res.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("get last insert id: %w", err)
-	}
-	// Always look up by slug. ON CONFLICT DO UPDATE may return a stale or
-	// incorrect LastInsertId depending on the SQLite driver version.
-	if docID == 0 {
-		err = tx.QueryRowContext(ctx, `SELECT id FROM review_docs WHERE slug = ?`, slug).Scan(&docID)
-		if err != nil {
-			return fmt.Errorf("lookup doc id for slug %q: %w", slug, err)
-		}
-	}
-	// Verify the looked-up docID actually exists (safety check).
-	var checkID int64
-	if err := tx.QueryRowContext(ctx, `SELECT id FROM review_docs WHERE id = ?`, docID).Scan(&checkID); err != nil {
-		// LastInsertId was wrong; fall back to slug lookup.
-		err = tx.QueryRowContext(ctx, `SELECT id FROM review_docs WHERE slug = ?`, slug).Scan(&docID)
-		if err != nil {
-			return fmt.Errorf("lookup doc id for slug %q: %w", slug, err)
-		}
+		RETURNING id
+	`, slug, page.Title, path, string(data), frontmatter, time.Now().Unix()).Scan(&docID); err != nil {
+		return 0, fmt.Errorf("upsert review doc: %w", err)
 	}
 
 	// Delete stale snippets from a previous index of this doc.
 	delRes, err := tx.ExecContext(ctx, `DELETE FROM review_doc_snippets WHERE doc_id = ?`, docID)
 	if err != nil {
-		return fmt.Errorf("delete stale snippets: %w", err)
+		return 0, fmt.Errorf("delete stale snippets: %w", err)
 	}
-	delCount, _ := delRes.RowsAffected()
-	_ = delCount
+	_, _ = delRes.RowsAffected()
 
 	for _, snip := range page.Snippets {
 		paramsJSON, _ := json.Marshal(snip.Params)
@@ -273,12 +253,12 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 			snip.Kind, snip.Language, snip.Text, string(paramsJSON),
 			snip.StartLine, snip.EndLine, snip.CommitHash)
 		if err != nil {
-			return fmt.Errorf("insert snippet: %w", err)
+			return 0, fmt.Errorf("insert snippet: %w", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit doc: %w", err)
+		return 0, fmt.Errorf("commit doc: %w", err)
 	}
-	return nil
+	return len(page.Snippets), nil
 }

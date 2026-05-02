@@ -683,3 +683,30 @@ And for the 252-commit range:
 6. Fix `--patterns` flag/docs mismatch.
 7. Fix worker-pool cleanup/error behavior.
 8. gofmt/test/clean artifacts.
+
+## Step 9: Implemented docs-only cleanup pass 1
+
+### What I changed
+
+- Replaced the unsafe review-doc upsert path with `INSERT ... ON CONFLICT DO UPDATE ... RETURNING id`, eliminating `LastInsertId()` for doc upserts.
+- Changed `indexDoc` to return the number of resolved snippets, and wired `IndexResult.SnippetsIndexed` so CLI output is truthful.
+- Moved git commit-range resolution inside `if !DocsOnly`, so docs-only no longer touches git range parsing or commit filtering.
+- Changed `review index --docs-only` to use `review.Open()` and validate that the DB already contains commits via `Store.HasCommits()`.
+- Changed `review index` and `review db create` to return a non-zero error when `IndexReview` accumulates phase errors.
+- Added tests for doc upsert/stale snippet replacement, multi-doc docs-only indexing with invalid commit range, snippet counts, and `HasCommits`.
+
+### Validation
+
+- `GOWORK=off go test ./internal/review/...` → pass
+- `GOWORK=off go test ./internal/history/... ./internal/staticapp/... ./cmd/codebase-browser/...` → pass
+
+### Why this matters
+
+This removes the root cause of the FK confusion. The code no longer trusts `LastInsertId()` after an upsert, and docs-only now behaves as a real DB+markdown operation instead of a partial commit-indexing operation.
+
+### Remaining follow-ups
+
+- Render snippets from DB snapshot content instead of the live checkout.
+- Fix `--patterns` flag/docs mismatch.
+- Fix worker-pool cleanup/error handling.
+- Clean accidental artifacts and run a final full gofmt/test pass.

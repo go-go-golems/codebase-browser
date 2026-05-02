@@ -31,12 +31,12 @@
 
 ## Docs-only follow-up cleanup (from review 02)
 
-- [ ] E1: Replace `LastInsertId()` doc upsert path with `RETURNING id` or unconditional slug lookup.
-- [ ] E2: Make `indexDoc` return snippet counts and increment `IndexResult.SnippetsIndexed`.
-- [ ] E3: Make `--docs-only` skip git commit-range resolution and commit filtering entirely.
-- [ ] E4: Make `--docs-only` require an existing review DB instead of using `OpenOrCreate`.
-- [ ] E5: Return non-zero from CLI commands when `IndexReview` accumulates errors.
-- [ ] E6: Add tests for docs-only single-doc update, multi-doc update, stale snippet deletion, snippet counts, missing DB, and empty DB failure.
+- [x] E1: Replace `LastInsertId()` doc upsert path with `RETURNING id` or unconditional slug lookup.
+- [x] E2: Make `indexDoc` return snippet counts and increment `IndexResult.SnippetsIndexed`.
+- [x] E3: Make `--docs-only` skip git commit-range resolution and commit filtering entirely.
+- [x] E4: Make `--docs-only` require an existing review DB instead of using `OpenOrCreate`.
+- [x] E5: Return non-zero from CLI commands when `IndexReview` accumulates errors.
+- [x] E6: Add tests for docs-only single-doc update, multi-doc update, stale snippet deletion, snippet counts, missing DB, and empty DB failure.
 - [ ] E7: Render snippets from DB-backed snapshot content instead of the live working tree.
 - [ ] E8: Fix `--patterns` behavior/docs mismatch by switching to `StringSliceVar` or documenting repeated flags only.
 - [ ] E9: Fix worker-pool worktree cleanup and per-commit failure behavior.
