@@ -360,3 +360,41 @@ cfg := &packages.Config{
 - Root cause: `corporate-headquarters/go.work` lists `./codebase-browser` but worktrees are at `.git-worktrees/<hash>` which is NOT listed
 - Fix: `GOWORK=off` in `packages.Config.Env`
 - Verified: `GOWORK=off` → 33 packages loaded correctly from worktree
+
+## Step 5: Incremental indexing + Normalized schema implementation
+
+Implemented both Phase A (incremental indexing) and Phase B (normalized schema).
+
+### What I did
+
+- Added `--incremental` flag to `review index` command
+- Added `review.OpenOrCreate()` and `review.Store.HasTables()`
+- Added commit filtering in `IndexReview` when `Incremental=true`
+- Rewrote `internal/history/schema.go` with normalized tables:
+  - Base tables: `commits`, `packages`, `files`, `symbols`, `ref_versions`, `file_contents`
+  - Mapping tables: `commit_packages`, `commit_files`, `commit_symbols`, `commit_refs`
+  - Views: `snapshot_packages`, `snapshot_files`, `snapshot_symbols`, `snapshot_refs`, `symbol_history`
+- Rewrote `internal/history/loader.go` with `INSERT OR IGNORE` + mapping table writes
+- Updated `internal/staticapp/export_test.go` fixture to use new schema
+
+### Key measurements
+
+| Commits | Old Schema | New Schema | Reduction |
+|---|---|---|---|
+| 5 | 3.2 MB | 516 KB | 6× |
+| 10 | 6.4 MB | 864 KB | 7× |
+| 20 | 12.4 MB | 1.1 MB | 11× |
+| 50 | 32.3 MB | 1.4 MB | **23×** |
+
+Incremental indexing: re-indexing 10 already-indexed commits takes **12ms** (skip all).
+
+### What was tricky
+
+- The `snapshot_refs` view uses `json_each()` to expand `locations_json` — SQLite doesn't support `WITH ORDINALITY` so I used `row_number() OVER (PARTITION BY ...)` instead
+- The symbol insert needed a subquery joining `commit_files` to look up the file_id by stable_id for the current commit
+- The upsert pattern (`INSERT ... ON CONFLICT DO NOTHING RETURNING id` then fallback `SELECT id WHERE ...`) is repeated 4 times — could be extracted into a helper
+
+### Commit hashes
+
+- `1b80811` — feat: add --incremental flag
+- `02bb76f` — feat: normalized SQLite schema — 23x smaller databases

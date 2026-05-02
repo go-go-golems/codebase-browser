@@ -28,3 +28,13 @@ Root-caused worktree extraction bug: packages.Config needs GOWORK=off when paren
 
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/indexer/extractor.go — packages.Config needs GOWORK=off env var for worktree extraction
 
+
+## 2026-05-02
+
+Phase A (incremental indexing) complete: --incremental flag added, tested with 5+5+0 pattern, 12ms skip for all-cached run
+
+
+## 2026-05-02
+
+Phase B complete: Normalized schema implemented. 50 commits: 32.3MB -> 1.4MB (23x smaller). All tests pass. Views recreate old table shapes for browser compatibility.
+
