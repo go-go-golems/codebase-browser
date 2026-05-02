@@ -766,3 +766,19 @@ The review document is ready for reMarkable upload. No code changed in this step
 ### Step 11 upload addendum
 
 Uploaded `review/03-full-architecture-and-code-review-after-optimization.md` to reMarkable as `GCB-017 Full Architecture Code Review After Optimization.pdf` under `/ai/2026/05/02/GCB-017`. Verified with `remarquee cloud ls /ai/2026/05/02/GCB-017 --long --non-interactive`.
+
+## Step 12: Prioritized follow-up cleanup tasks
+
+### Prompt Context
+
+**User prompt (verbatim):** "Ok, add tasks for 1.* and 2.* . I'd rather cut stuff rather than keepsp backwards compatibility, the goal is clarity and simplicity."
+
+### What I did
+
+Added priority cleanup tasks P1.1-P1.4 and P2.1-P2.4 to `tasks.md`, reflecting the decision to prefer clarity and deletion over compatibility shims.
+
+### Key interpretation
+
+- For `files.content_hash`, the task is now to remove the column/projection and use `sha256` as the single content key, rather than keeping both populated.
+- For `review export --include-source`, the task is to remove or rename the misleading behavior rather than preserve the external-repo-incompatible flag.
+- For schema metadata, the goal is explicitness for the new clean-cutover schema, not supporting old schema migrations.

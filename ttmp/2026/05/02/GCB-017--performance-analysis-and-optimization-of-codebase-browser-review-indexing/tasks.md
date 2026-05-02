@@ -54,3 +54,19 @@
 - [ ] F8: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors.
 - [ ] F9: Clarify, rename, or replace `review export --include-source` for external repos.
 - [ ] F10: Revisit default package patterns; consider `./...`, warnings, or an `--all-packages` shortcut.
+
+## Priority cleanup tasks requested after review (clarity over compatibility)
+
+### 1.x Address now / before considering GCB-017 done
+
+- [ ] P1.1: Make static export review-doc rendering use the same DB-backed snapshot source as `review index` (no live checkout reads in `internal/staticapp/reviewdocs.go`).
+- [ ] P1.2: Remove the ambiguous `files.content_hash` column and `snapshot_files.content_hash` projection; use `files.sha256` as the single content key everywhere.
+- [ ] P1.3: Replace `author_time`-based latest snapshot selection with an explicit indexed sequence/range-order column, and use one helper for latest commit lookup.
+- [ ] P1.4: Remove or rename `review export --include-source`; prefer deleting the misleading external-repo behavior over preserving compatibility.
+
+### 2.x High-value soon
+
+- [ ] P2.1: Add `browser.LoadIndex(*indexer.Index)` and remove the JSON marshal/unmarshal roundtrip in `review.LoadLatestSnapshot`.
+- [ ] P2.2: Add `--strict-docs` to fail on unresolved `codebase-*` directive errors for CI/export reliability.
+- [ ] P2.3: Refactor normalized loader upserts to reduce duplicated insert-or-lookup code and hand-counted SQL arguments.
+- [ ] P2.4: Add a simple schema metadata/version table for clarity, not legacy migration compatibility.
