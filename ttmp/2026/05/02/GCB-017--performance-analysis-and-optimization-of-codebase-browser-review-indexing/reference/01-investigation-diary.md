@@ -762,3 +762,7 @@ After committing `f1b09d4`, ran the full suite with `GOWORK=off go test ./...`; 
 ### Validation / next step
 
 The review document is ready for reMarkable upload. No code changed in this step other than ticket docs/tasks/diary.
+
+### Step 11 upload addendum
+
+Uploaded `review/03-full-architecture-and-code-review-after-optimization.md` to reMarkable as `GCB-017 Full Architecture Code Review After Optimization.pdf` under `/ai/2026/05/02/GCB-017`. Verified with `remarquee cloud ls /ai/2026/05/02/GCB-017 --long --non-interactive`.
