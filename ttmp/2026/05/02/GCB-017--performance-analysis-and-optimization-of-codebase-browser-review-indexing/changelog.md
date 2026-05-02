@@ -14,3 +14,8 @@ Created GCB-017 ticket, diary, and design document. Analyzed 264MB production da
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ttmp/2026/05/02/GCB-017--performance-analysis-and-optimization-of-codebase-browser-review-indexing/design/01-performance-analysis-and-design-guide-for-review-indexing.md — Full design document (1258 lines)
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ttmp/2026/05/02/GCB-017--performance-analysis-and-optimization-of-codebase-browser-review-indexing/reference/01-investigation-diary.md — Investigation diary with Step 1 and Step 2
 
+
+## 2026-05-02
+
+Uploaded bundled design doc + diary to reMarkable at /ai/2026/05/02/GCB-017
+

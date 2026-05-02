@@ -187,3 +187,83 @@ These numbers tell us that the current "snapshot per commit" approach stores mas
 
 - All SQL scripts saved as `scripts/00-*.sql` through `scripts/13-*.sql`
 - Shell wrapper: `scripts/02-analyze-db.sh` runs the full analysis pipeline
+
+## Step 3: Design document and reMarkable upload
+
+Wrote the full design document (`design/01-performance-analysis-and-design-guide-for-review-indexing.md`, 1258 lines) covering:
+- §1-2: What codebase-browser is and how the 4-phase indexing pipeline works
+- §3: Deep dive into every SQLite table with column explanations
+- §4: Performance measurements with real numbers
+- §5: The redundancy problem (99%+ deduplication ratios, 98% average commit overlap)
+- §6: Normalized schema design with full DDL, pseudocode, and compatibility views
+- §7: Incremental indexing design with flow diagrams
+- §8: 5-phase implementation plan
+- §9-10: API and file reference tables
+- §11: ASCII diagrams showing current vs proposed data flow
+- Appendix A: Glossary, Appendix B: Reproduction instructions
+
+Uploaded as a bundled PDF to reMarkable at `/ai/2026/05/02/GCB-017`.
+
+### Prompt Context
+
+**User prompt (verbatim):** (see Step 1)
+
+**Assistant interpretation:** Continue the analysis, write the full design document, upload to reMarkable.
+
+**Inferred user intent:** Produce a comprehensive, intern-ready guide that covers everything needed to understand and optimize the system.
+
+### What I did
+
+- Wrote the design document in 6 append calls to avoid tool call length limits
+- Created 14 numbered SQL analysis scripts (`scripts/00-*.sql` through `scripts/13-*.sql`)
+- Created 2 shell scripts (`scripts/01-benchmark-indexing.sh`, `scripts/02-analyze-db.sh`)
+- Related 15 source files to the diary and design documents
+- Uploaded bundled PDF to reMarkable via `remarquee upload bundle`
+- Committed all ticket work
+
+### Why
+
+The design document needs to be thorough enough for an intern to understand the entire system and implement the optimization without additional context.
+
+### What worked
+
+- Writing the document in 6 parts kept each tool call manageable
+- `remarquee upload bundle` produced a clean PDF with a ToC
+- The SQL scripts provide reproducible analysis
+
+### What didn't work
+
+- N/A
+
+### What I learned
+
+- The current schema has exactly the right structure for the initial use case (static export), but doesn't scale to continuous/incremental use
+- The `file_contents` table is already well-designed (deduplicated by SHA-256) — it's the snapshot tables that need normalization
+
+### What was tricky to build
+
+- Ensuring the normalized schema's compatibility views produce identical column names/types to the current tables, so the React browser's SQL queries don't need changes
+
+### What warrants a second pair of eyes
+
+- The `ref_versions.locations_json` approach for collapsing multiple ref locations into one row — verify this doesn't break any browser queries that expect one row per location
+
+### What should be done in the future
+
+- Run benchmarks on a large repo (glazed, go-go-golems) to confirm the 99% dedup ratios hold at scale
+- Investigate the worktree extraction bug (empty symbol/file/ref tables)
+- Implement Phase 2 (normalized schema)
+
+### Code review instructions
+
+- Read the design document top-to-bottom; it's self-contained
+- Run `sqlite-viz tables -d /tmp/review.db` to verify the table size numbers
+- Run `sqlite3 -header -column /tmp/review.db < scripts/02-deduplication-analysis.sql` to reproduce the redundancy findings
+
+### Technical details
+
+- Design doc: `ttmp/.../GCB-017/design/01-performance-analysis-and-design-guide-for-review-indexing.md` (1258 lines)
+- Diary: `ttmp/.../GCB-017/reference/01-investigation-diary.md`
+- Scripts: `ttmp/.../GCB-017/scripts/` (16 files)
+- Commit: a8d1a1d — "GCB-017: Performance analysis and design guide for review indexing"
+- reMarkable: `/ai/2026/05/02/GCB-017/GCB-017 Performance Analysis - Codebase Browser Review Indexing.pdf`
