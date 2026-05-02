@@ -32,6 +32,11 @@ type IndexOptions struct {
 	// preserved. New commits are appended; existing snapshots are not
 	// re-extracted.
 	Incremental bool
+
+	// DocsOnly skips commit indexing entirely and only re-indexes markdown
+	// docs. Useful when you've updated a review doc but the commits haven't
+	// changed. Requires an existing database with commits already indexed.
+	DocsOnly bool
 }
 
 // IndexResult describes what the indexer did.
@@ -92,11 +97,12 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 		fmt.Fprintf(os.Stderr, "Indexing %d new commits (skipping %d existing)\n", len(toIndex), skipped)
 	}
 
-	useWorktrees := len(toIndex) > 1
-	histOpts := history.IndexOptions{
-		RepoRoot:     opts.RepoRoot,
-		Commits:      toIndex,
-		Patterns:     opts.Patterns,
+	if !opts.DocsOnly {
+		useWorktrees := len(toIndex) > 1
+		histOpts := history.IndexOptions{
+			RepoRoot:     opts.RepoRoot,
+			Commits:      toIndex,
+			Patterns:     opts.Patterns,
 		IncludeTests: opts.IncludeTests,
 		Worktrees:    useWorktrees,
 		Parallelism:  opts.Parallelism,
@@ -108,18 +114,19 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 		},
 	}
 
-	histResult, err := history.IndexCommits(ctx, store.History, histOpts)
-	if err != nil {
-		return nil, fmt.Errorf("index commits: %w", err)
-	}
-	result.CommitsIndexed = histResult.Indexed
-	for _, e := range histResult.Errors {
-		result.Errors = append(result.Errors, IndexError{
-			Phase:  "commit",
-			Detail: e.ShortHash,
-			Err:    e.Err,
-		})
-	}
+		histResult, err := history.IndexCommits(ctx, store.History, histOpts)
+		if err != nil {
+			return nil, fmt.Errorf("index commits: %w", err)
+		}
+		result.CommitsIndexed = histResult.Indexed
+		for _, e := range histResult.Errors {
+			result.Errors = append(result.Errors, IndexError{
+				Phase:  "commit",
+				Detail: e.ShortHash,
+				Err:    e.Err,
+			})
+		}
+	} // end !DocsOnly
 
 	if opts.SkipDocs {
 		result.Duration = time.Since(start)
@@ -187,6 +194,8 @@ func discoverDocs(paths []string) ([]string, error) {
 }
 
 // indexDoc reads a markdown file, renders it to resolve snippets, and stores both.
+// Each doc is wrapped in a transaction so that stale snippet cleanup and
+// re-insert are atomic.
 func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Loaded, sourceFS fs.FS) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -203,7 +212,13 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 	frontmatter := "{}"
 	// TODO: parse YAML frontmatter from data if present
 
-	res, err := store.DB().ExecContext(ctx, `
+	tx, err := store.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, `
 		INSERT INTO review_docs (slug, title, path, content, frontmatter_json, indexed_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(slug) DO UPDATE SET
@@ -221,10 +236,35 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 	if err != nil {
 		return fmt.Errorf("get last insert id: %w", err)
 	}
+	// Always look up by slug. ON CONFLICT DO UPDATE may return a stale or
+	// incorrect LastInsertId depending on the SQLite driver version.
+	if docID == 0 {
+		err = tx.QueryRowContext(ctx, `SELECT id FROM review_docs WHERE slug = ?`, slug).Scan(&docID)
+		if err != nil {
+			return fmt.Errorf("lookup doc id for slug %q: %w", slug, err)
+		}
+	}
+	// Verify the looked-up docID actually exists (safety check).
+	var checkID int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM review_docs WHERE id = ?`, docID).Scan(&checkID); err != nil {
+		// LastInsertId was wrong; fall back to slug lookup.
+		err = tx.QueryRowContext(ctx, `SELECT id FROM review_docs WHERE slug = ?`, slug).Scan(&docID)
+		if err != nil {
+			return fmt.Errorf("lookup doc id for slug %q: %w", slug, err)
+		}
+	}
+
+	// Delete stale snippets from a previous index of this doc.
+	delRes, err := tx.ExecContext(ctx, `DELETE FROM review_doc_snippets WHERE doc_id = ?`, docID)
+	if err != nil {
+		return fmt.Errorf("delete stale snippets: %w", err)
+	}
+	delCount, _ := delRes.RowsAffected()
+	_ = delCount
 
 	for _, snip := range page.Snippets {
 		paramsJSON, _ := json.Marshal(snip.Params)
-		_, err := store.DB().ExecContext(ctx, `
+		_, err := tx.ExecContext(ctx, `
 			INSERT INTO review_doc_snippets
 				(doc_id, stub_id, directive, symbol_id, file_path, kind, language,
 				 text, params_json, start_line, end_line, commit_hash)
@@ -237,5 +277,8 @@ func indexDoc(ctx context.Context, store *Store, path string, loaded *browser.Lo
 		}
 	}
 
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit doc: %w", err)
+	}
 	return nil
 }

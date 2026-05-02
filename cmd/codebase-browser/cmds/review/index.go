@@ -20,6 +20,7 @@ func newIndexCmd() *cobra.Command {
 		includeTests bool
 		parallelism  int
 		incremental  bool
+		docsOnly     bool
 	)
 
 	cmd := &cobra.Command{
@@ -58,7 +59,7 @@ Examples:
 
 			var store *review.Store
 			var err error
-			if incremental {
+			if incremental || docsOnly {
 				store, err = review.OpenOrCreate(dbPath)
 			} else {
 				store, err = review.Create(dbPath)
@@ -76,6 +77,7 @@ Examples:
 				IncludeTests: includeTests,
 				Parallelism:  parallelism,
 				Incremental:  incremental,
+				DocsOnly:     docsOnly,
 				OnProgress: func(phase string, done, total int, detail string) {
 					fmt.Fprintf(os.Stderr, "  [%s %d/%d] %s\n", phase, done, total, detail)
 				},
@@ -105,6 +107,7 @@ Examples:
 	cmd.Flags().BoolVar(&includeTests, "include-tests", true, "Include test files")
 	cmd.Flags().IntVar(&parallelism, "parallelism", 1, "Max concurrent worktrees for multi-commit indexing")
 	cmd.Flags().BoolVar(&incremental, "incremental", false, "Append to existing database instead of recreating it")
+	cmd.Flags().BoolVar(&docsOnly, "docs-only", false, "Only re-index markdown docs, skip commit indexing (requires existing DB)")
 
 	_ = cmd.MarkFlagRequired("docs")
 
