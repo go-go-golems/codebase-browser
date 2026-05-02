@@ -650,3 +650,36 @@ And for the 252-commit range:
 - DB in export: 6.8 MB (252 commits, 372 symbols, 5935 ref versions)
 - Review docs: 2 docs, 14 resolved snippets
 - Commit: `9842ce2` — docs update
+
+## Step 8: Handoff review of docs-only/FK work
+
+### Prompt Context
+
+**User prompt (verbatim):** "We are taking over for your little brother who seemingly might have been a bit lost on the issue with the FK. Can you go over their work and see if you find something suspicious, what they could have done btter, what they did ewlel, what they should have known aor noticed?" followed by "add a detailed review document to the ticket detailing all the above, and add the necessary tasks to the ticket. Then continue the implementation..."
+
+### What I did
+
+- Reviewed the recently-added `--docs-only` path, especially the FK failure around `review_doc_snippets.doc_id`.
+- Wrote a detailed code-review document at `reference/02-docs-only-and-review-indexing-code-review.md`.
+- Added follow-up tasks E1-E10 to `tasks.md`.
+- Committed the review document and task additions as `078414c`.
+
+### Key findings
+
+- The FK bug was caused by trusting `LastInsertId()` after an SQLite upsert. It returned a bogus ID (`32`) while the real `review_docs.id` was `2`.
+- The temporary existence-check fallback is not sufficient if a stale ID happens to exist for another doc.
+- `--docs-only` still resolves git ranges and opens with `OpenOrCreate`, both of which are wrong for a DB-only doc update mode.
+- Snippet counts are never incremented, so CLI output says `0 snippets` even when snippets are stored.
+- CLI commands print accumulated errors but still return success.
+- Source snippets are rendered from the live checkout rather than DB snapshot content, which can mismatch the indexed offsets.
+
+### Next implementation order
+
+1. Fix doc upsert ID retrieval and snippet counts.
+2. Make docs-only skip git and require existing DB.
+3. Return non-zero on accumulated errors.
+4. Add tests.
+5. Add DB-backed snapshot source FS.
+6. Fix `--patterns` flag/docs mismatch.
+7. Fix worker-pool cleanup/error behavior.
+8. gofmt/test/clean artifacts.
