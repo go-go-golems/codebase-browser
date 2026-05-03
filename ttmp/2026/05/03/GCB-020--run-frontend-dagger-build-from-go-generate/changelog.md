@@ -26,3 +26,12 @@ Implemented cmd/build-web Dagger-first pnpm frontend builder, wired internal/sta
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/cmd/build-web/main.go — Dagger-first frontend build command
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/generate_build.go — go generate wrapper now invokes cmd/build-web
 
+
+## 2026-05-03
+
+Validated the default Dagger path from a clean ui/dist/internal/staticapp/embed/public state; go generate ./internal/staticapp now builds the UI through Dagger and writes embed assets.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/cmd/build-web/main.go — Default Dagger build path validated
+

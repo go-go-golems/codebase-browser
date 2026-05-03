@@ -54,3 +54,23 @@ All commands passed.
 ### Notes
 
 I validated the local fallback path explicitly because it is deterministic and does not depend on Docker availability. The Dagger path uses the same SDK and CacheVolume pattern as `cmd/build-ts-index`, so CI should now build the SPA during `go generate` instead of requiring prebuilt `ui/dist/public`.
+
+## Step 3: Validate actual Dagger path
+
+After committing the initial implementation I also validated the default Dagger path, not only the local fallback:
+
+```bash
+rm -rf internal/staticapp/embed/public ui/dist
+GOWORK=off go generate ./internal/staticapp
+test -f internal/staticapp/embed/public/index.html
+GOWORK=off go test ./cmd/build-web ./internal/staticapp
+```
+
+This succeeded and printed:
+
+```text
+build-web: wrote .../internal/staticapp/embed/public via Dagger
+generate_staticapp: wrote internal/staticapp/embed/public
+```
+
+So `go generate ./internal/staticapp` now actually runs the Dagger pnpm frontend build and exports the Vite output into the embed directory from a clean state.
