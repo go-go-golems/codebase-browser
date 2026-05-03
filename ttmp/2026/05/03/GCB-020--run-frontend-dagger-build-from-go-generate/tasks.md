@@ -7,7 +7,3 @@
 - [x] Validate clean generation after removing `ui/dist` and embedded public assets.
 - [x] Commit implementation and close ticket.
 
-## TODO
-
-- [ ] Add tasks here
-
