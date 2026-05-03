@@ -1,14 +1,19 @@
 version: 2
-project_name: XXX
+project_name: codebase-browser
 
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
-    # you may remove this if you don't need go generate
-    - go generate ./...
+    # Build the generated source/index/static frontend payloads used by -tags embed.
+    # Keep this scoped through Makefile instead of `go generate ./...` so an
+    # existing internal/sourcefs/embed/source snapshot is not recursively
+    # regenerated during releases.
+    - make generate
+
 builds:
-  - id: XXX-linux
+  - id: codebase-browser-linux
+    main: ./cmd/codebase-browser
+    binary: codebase-browser
     env:
       - CGO_ENABLED=1
       - CC_linux_amd64=gcc
@@ -17,29 +22,44 @@ builds:
       - CXX_linux_arm64=aarch64-linux-gnu-g++
       - 'CC={{ index .Env (print "CC_" .Os "_" .Arch) }}'
       - 'CXX={{ index .Env (print "CXX_" .Os "_" .Arch) }}'
-    main: ./cmd/XXX
-    binary: XXX
     goos:
       - linux
-# I am not able to test windows at the time
-#      - windows
     goarch:
       - amd64
       - arm64
-  - id: XXX-darwin
+    tags:
+      - sqlite_fts5
+      - embed
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+  - id: codebase-browser-darwin
+    main: ./cmd/codebase-browser
+    binary: codebase-browser
     env:
       - CGO_ENABLED=1
-    main: ./cmd/XXX
-    binary: XXX
     goos:
       - darwin
     goarch:
       - amd64
       - arm64
+    tags:
+      - sqlite_fts5
+      - embed
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
 checksum:
-  name_template: 'checksums.txt'
+  name_template: checksums.txt
+
+signs:
+  - artifacts: checksum
+    # setup for github actions according to https://goreleaser.com/ci/actions/
+    args: ["--batch", "-u", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign", "${artifact}"]
+
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
+
 changelog:
   sort: asc
   filters:
@@ -47,59 +67,40 @@ changelog:
       - '^docs:'
       - '^test:'
 
-signs:
-  - artifacts: checksum
-    # setup for github actions according to https://goreleaser.com/ci/actions/
-    args: [ "--batch", "-u", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign", "${artifact}" ]
-
-brews:
-  - name: XXX
-    description: "XXX is a tool"
-    homepage: "https://github.com/go-go-golems/XXX"
+homebrew_casks:
+  - name: codebase-browser
+    binaries:
+      - codebase-browser
+    description: "Turn code reviews into static, shareable SQLite-backed browsers"
+    homepage: "https://github.com/go-go-golems/codebase-browser"
     repository:
       owner: go-go-golems
       name: homebrew-go-go-go
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
 
 nfpms:
-  -
-    id: packages
-
+  - id: packages
     vendor: GO GO GOLEMS
-    homepage: https://github.com/go-go-golems/
+    homepage: https://github.com/go-go-golems/codebase-browser
     maintainer: Manuel Odendahl <wesen@ruinwesen.com>
-
     description: |-
-      XXX is a tool
-
+      Turn code reviews into static, shareable SQLite-backed browsers.
     license: MIT
-
-    # Formats to be generated.
     formats:
-      # - apk
       - deb
       - rpm
-
-    # Version Release.
-    release: 1
-
-    # Section.
+    release: "1"
     section: default
-
-    # Priority.
     priority: extra
-
-    # Custom configuration applied only to the Deb packager.
     deb:
-      # Lintian overrides
       lintian_overrides:
         - statically-linked-binary
         - changelog-file-missing-in-native-package
 
 publishers:
   - name: fury.io
-    # by specifying `packages` id here goreleaser will only use this publisher
-    # with artifacts identified by this id
+    env:
+      - FURY_TOKEN={{ .Env.FURY_TOKEN }}
     ids:
       - packages
     dir: "{{ dir .ArtifactPath }}"
