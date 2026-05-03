@@ -35,3 +35,8 @@ Validated the default Dagger path from a clean ui/dist/internal/staticapp/embed/
 
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/cmd/build-web/main.go — Default Dagger build path validated
 
+
+## 2026-05-03
+
+Implemented and validated Dagger-backed frontend generation: go generate ./internal/staticapp now runs cmd/build-web, exports Vite assets into internal/staticapp/embed/public, Makefile/CI rely on go generate, and both local fallback plus default Dagger paths were validated.
+

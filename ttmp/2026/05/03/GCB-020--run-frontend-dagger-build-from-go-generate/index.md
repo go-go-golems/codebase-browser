@@ -1,7 +1,7 @@
 ---
 Title: Run Frontend Dagger Build From Go Generate
 Ticket: GCB-020
-Status: active
+Status: complete
 Topics:
     - ci
     - frontend
@@ -13,10 +13,11 @@ Owners: []
 RelatedFiles: []
 ExternalSources: []
 Summary: ""
-LastUpdated: 2026-05-03T12:15:45.910075527-04:00
+LastUpdated: 2026-05-03T12:19:46.458519282-04:00
 WhatFor: ""
 WhenToUse: ""
 ---
+
 
 # Run Frontend Dagger Build From Go Generate
 
