@@ -166,3 +166,22 @@ This is an intermediate bridge phase. Deprecated `static_review_rendered_docs` a
 ### Notes
 
 This is the main GCB-018 cutover for static review pages. Review pages now use an explicit SQLite JSON block model rather than hidden raw-HTML stubs. The remaining deprecated stub code is limited to the older generic docs page path and to `docs.Render`, which still supplies strict symbol/file validation and review snippet indexing until that resolver is split from HTML rendering.
+
+## Step 7: Phase 7 strict commit-ref validation uses the registry
+
+### What changed
+
+- Updated `internal/review/strict_docs.go` to use `reviewwidgets.Lookup` and `reviewwidgets.LookupStep` for commit-ref extraction.
+- Removed the hardcoded strict-docs knowledge that only `commit`, `from`, and `to` might matter.
+- Top-level directives now contribute strict commit refs through their registry `CommitRefKeys`.
+- `codebase-commit-walk` child steps now contribute strict commit refs through each step kind's registry `CommitRefKeys`.
+
+### Validation
+
+- `GOWORK=off go test ./internal/review ./internal/reviewwidgets ./internal/staticapp` passed.
+- `pnpm -C ui run typecheck` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+
+### Notes
+
+This completes the strict-validation parity part of GCB-018 for commit refs: when a future directive or commit-walk step adds a commit-ref parameter, strict validation is updated by changing the central registry, not by hunting through `strict_docs.go`.

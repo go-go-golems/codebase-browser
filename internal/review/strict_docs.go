@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/wesen/codebase-browser/internal/docs"
+	"github.com/wesen/codebase-browser/internal/reviewwidgets"
 )
 
 type strictCommitRow struct {
@@ -81,18 +82,23 @@ func snippetCommitRefs(snippet docs.SnippetRef) []string {
 
 	add(snippet.CommitHash)
 	if snippet.Params != nil {
-		add(snippet.Params["commit"])
-		add(snippet.Params["from"])
-		add(snippet.Params["to"])
+		if def, ok := reviewwidgets.Lookup(snippet.Directive); ok {
+			for _, key := range def.CommitRefKeys {
+				add(snippet.Params[key])
+			}
+		}
 		if stepsJSON := snippet.Params["steps"]; stepsJSON != "" {
 			var steps []struct {
+				Kind   string            `json:"kind"`
 				Params map[string]string `json:"params"`
 			}
 			if err := json.Unmarshal([]byte(stepsJSON), &steps); err == nil {
 				for _, step := range steps {
-					add(step.Params["commit"])
-					add(step.Params["from"])
-					add(step.Params["to"])
+					if def, ok := reviewwidgets.LookupStep(step.Kind); ok {
+						for _, key := range def.CommitRefKeys {
+							add(step.Params[key])
+						}
+					}
 				}
 			}
 		}

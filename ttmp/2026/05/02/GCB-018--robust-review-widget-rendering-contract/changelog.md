@@ -67,3 +67,12 @@ Cut static review pages over to structured blocks: frontend reads static_review_
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/api/sqlJsQueryProvider.ts — Loads review pages from static_review_pages and snippets from review_doc_snippets
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — Direct structured block renderer with no DOM scanning/portals
 
+
+## 2026-05-02
+
+Strict docs commit-ref validation now uses the central reviewwidgets registry for both top-level directives and commit-walk child steps.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/strict_docs.go — Commit ref extraction now driven by reviewwidgets registry metadata
+
