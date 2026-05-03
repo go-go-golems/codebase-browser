@@ -35,3 +35,4 @@ WhenToUse: "Use during review and handoff."
 - Rebuilt embedded SPA assets, exported the full Glazed site to `/tmp/glazed-full-export-gcb021`, and validated the source page with a Chromium CDP smoke script.
 - Committed the frontend sql.js performance implementation.
 - Uploaded the updated post-implementation guide bundle to reMarkable as `GCB-021 Frontend sql.js Performance Guide - Updated`.
+- Verified the fixed source page with Playwright: source+xref readiness in ~2.25s, source-ref query 82 rows in 19 ms, file xref queries 2 ms and 42 ms; the old 4183 export still times out/hangs on the same route.

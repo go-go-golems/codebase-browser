@@ -329,3 +329,59 @@ OK: uploaded GCB-021 Frontend sql.js Performance Guide - Updated.pdf -> /ai/2026
 [f] GCB-021 Frontend sql.js Performance Guide
 [f] GCB-021 Frontend sql.js Performance Guide - Updated
 ```
+
+### 2026-05-03 — Step 6: Playwright/browser performance verification
+
+#### What changed
+
+- Verified the fixed full Glazed export in Playwright at `http://127.0.0.1:4184/`.
+- Compared behavior with the pre-fix export at `http://127.0.0.1:4183/`.
+
+#### Commands and observations
+
+Playwright loaded the fixed source page:
+
+```text
+http://127.0.0.1:4184/?debugSql&v=gcb021-run2#/source/pkg/help/publish/sqlite_validator.go
+```
+
+Readiness result:
+
+```json
+{
+  "elapsedMs": 2252,
+  "hasSource": true,
+  "usedBy": "6",
+  "uses": "25"
+}
+```
+
+The `?debugSql` console timings showed the formerly blocking source-ref query returning quickly:
+
+```text
+source refs: 82 rows in 19 ms
+file used-by refs: 6 rows in 2 ms
+file uses refs: 70 raw rows in 42 ms, grouped to Uses (25)
+```
+
+A second Playwright run with a Long Task observer reached source+xref readiness in about 1.16 seconds and reported a maximum long task of about 170 ms:
+
+```json
+{
+  "elapsedMs": 1163,
+  "body": ["pkg/help/publish/sqlite_validator.go", "Used by (6)", "Uses (25)"],
+  "maxLongTaskMs": 170
+}
+```
+
+The pre-fix export at port 4183 still reproduced the hang. A Playwright run waiting for the same source+xref readiness timed out, and the CDP smoke script against 4183 also timed out while trying to evaluate in the page, consistent with the browser main thread being blocked by the old sql.js query.
+
+#### What worked
+
+- The fixed export renders the source page and xref panel quickly enough for interactive use.
+- `?debugSql` now gives actionable per-query timings directly in the browser console.
+- The old export remains a useful negative control because it still hangs on the same route.
+
+#### Remaining caveat
+
+The fixed page still performs repeated commit-list queries while route data loads. They are not currently the bottleneck, but repeated `listCommits()` calls may be worth caching or deduplicating in a later frontend cleanup ticket.
