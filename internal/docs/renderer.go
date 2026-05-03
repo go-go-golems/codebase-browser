@@ -188,15 +188,7 @@ func stubHTML(ref *SnippetRef) string {
 }
 
 func resolveDirective(info string, body []string, loaded *browser.Loaded, sourceFS fs.FS) (*SnippetRef, error) {
-	parts := splitFields(info)
-	directive := parts[0]
-	params := map[string]string{}
-	for _, p := range parts[1:] {
-		kv := strings.SplitN(p, "=", 2)
-		if len(kv) == 2 {
-			params[kv[0]] = kv[1]
-		}
-	}
+	directive, params := reviewwidgets.ParseInfo(info)
 	if err := reviewwidgets.ValidateParams(directive, params); err != nil {
 		return nil, err
 	}
@@ -441,20 +433,14 @@ func parseCommitWalkSteps(lines []string, loaded *browser.Loaded) ([]commitWalkS
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		parts := splitFields(line)
+		parts := reviewwidgets.SplitFields(line)
 		if len(parts) == 0 {
 			continue
 		}
 		if parts[0] != "step" {
 			return nil, fmt.Errorf("commit walk line %d: expected step, got %q", i+1, parts[0])
 		}
-		params := map[string]string{}
-		for _, p := range parts[1:] {
-			kv := strings.SplitN(p, "=", 2)
-			if len(kv) == 2 {
-				params[kv[0]] = kv[1]
-			}
-		}
+		params := reviewwidgets.ParamsFromFields(parts[1:])
 		if err := reviewwidgets.ValidateStepParams(params); err != nil {
 			return nil, fmt.Errorf("commit walk line %d: %w", i+1, err)
 		}
@@ -486,53 +472,6 @@ func parseCommitWalkSteps(lines []string, loaded *browser.Loaded) ([]commitWalkS
 		steps = append(steps, step)
 	}
 	return steps, nil
-}
-
-func splitFields(s string) []string {
-	var fields []string
-	var b strings.Builder
-	quote := rune(0)
-	escaped := false
-	flush := func() {
-		if b.Len() == 0 {
-			return
-		}
-		fields = append(fields, b.String())
-		b.Reset()
-	}
-	for _, r := range s {
-		if escaped {
-			b.WriteRune(r)
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			if r == quote {
-				quote = 0
-			} else {
-				b.WriteRune(r)
-			}
-			continue
-		}
-		if r == '\'' || r == '"' {
-			quote = r
-			continue
-		}
-		if r == ' ' || r == '\t' {
-			flush()
-			continue
-		}
-		b.WriteRune(r)
-	}
-	if escaped {
-		b.WriteRune('\\')
-	}
-	flush()
-	return fields
 }
 
 // resolveSymbol accepts only full stable symbol IDs. Review documents should

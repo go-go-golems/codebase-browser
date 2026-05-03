@@ -36,3 +36,13 @@ Implemented Phase 2 registry foundation: added internal/reviewwidgets directive/
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/docs/renderer.go — Now validates directives and commit-walk steps via reviewwidgets
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/reviewwidgets/schema.go — Central directive and commit-walk step contract
 
+
+## 2026-05-02
+
+Implemented Phase 3 structured page model foundation with markdown/widget blocks, diagnostics, shared directive parsing helpers, and tests.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/docs/renderer.go — Removed duplicate splitFields parser in favor of reviewwidgets helpers
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/reviewwidgets/page_model.go — Structured review page model and BuildPage
+

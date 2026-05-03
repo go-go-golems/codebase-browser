@@ -14,7 +14,7 @@
 
 - [x] Phase 1: Add all-widget fixture review doc and Playwright smoke test for visible widget failures.
 - [x] Phase 2: Add `internal/reviewwidgets` registry/schema/parser/validator package.
-- [ ] Phase 3: Implement `BuildPage` structured review page model with markdown and widget blocks.
+- [x] Phase 3: Implement `BuildPage` structured review page model with markdown and widget blocks.
 - [ ] Phase 4: Add `static_review_pages` table and export structured page data.
 - [ ] Phase 5: Update sql.js provider and React review page to render structured blocks directly.
 - [ ] Phase 6: Delete DOM scanning, stub HTML, and old `static_review_rendered_docs` path.

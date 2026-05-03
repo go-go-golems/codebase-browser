@@ -70,3 +70,34 @@ This is Phase 1 of the GCB-018 plan: it freezes expected visible behavior before
 ### Notes
 
 This is the first real removal of duplicated/deprecated contract logic: directive/step required-param checks are no longer scattered only inside `internal/docs/renderer.go`. The old HTML stub/DOM hydration path still exists and will be removed after the structured review page model is implemented.
+
+## Step 4: Phase 3 structured page model foundation
+
+### What changed
+
+- Added `internal/reviewwidgets/page_model.go` with a new structured review page model:
+  - `Page`
+  - `Block`
+  - `Diagnostic`
+- Added `BuildPage(slug, mdSource)` that splits review Markdown into ordered blocks:
+  - rendered Markdown blocks (`type=markdown`, `html=...`)
+  - directive widget blocks (`type=widget`, `directive=...`, `props=...`, `body=...`)
+- Added shared directive parsing helpers:
+  - `ParseInfo`
+  - `ParamsFromFields`
+  - `SplitFields`
+- Removed the duplicate private `splitFields` implementation from `internal/docs/renderer.go`; the legacy renderer now uses `reviewwidgets.ParseInfo`, `SplitFields`, and `ParamsFromFields`.
+- Added page-model tests covering:
+  - markdown/widget block ordering
+  - directive diagnostics
+  - commit-walk step diagnostics
+  - quoted param parsing
+
+### Validation
+
+- `GOWORK=off go test ./internal/reviewwidgets ./internal/docs ./internal/review` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+
+### Notes
+
+This phase introduces the future structured representation without switching the browser/export path yet. More deprecated code was removed safely: the renderer no longer owns a private directive-field parser. The next phase should persist this page model into SQLite (`static_review_pages`) while the old `static_review_rendered_docs` path still exists only long enough to compare behavior.
