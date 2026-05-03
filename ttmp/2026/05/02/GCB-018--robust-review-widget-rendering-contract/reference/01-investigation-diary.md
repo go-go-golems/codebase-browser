@@ -229,3 +229,39 @@ This completes the cleanup the user explicitly asked for: the deprecated review/
 ### Notes
 
 The local smoke script still treats Playwright as optional because the repository does not yet declare a Playwright package dependency. CI now at least guarantees the strict index/export and SQLite-level structured-page smoke. If we want browser-level CI, the next small follow-up is to add Playwright as an explicit UI dev dependency and install browsers in the workflow.
+
+## Step 10: CI failure diagnosis and frontend-build fix
+
+### What failed
+
+GitHub Actions run `25284146811`, job `74125852166`, failed in the `generate assets` step. The important log line was:
+
+```text
+SPA assets missing at /home/runner/work/codebase-browser/codebase-browser/ui/dist/public; run `pnpm -C ui run build` first: stat .../ui/dist/public/index.html: no such file or directory
+```
+
+The workflow ran `go generate ./...` directly. After the portable embedded-SPA work, `internal/staticapp/generate.go` expects `ui/dist/public/index.html` to already exist so it can copy frontend assets into `internal/staticapp/embed/public`. Locally, `make build` works because it runs `frontend-build` before `generate`, but CI was still using the older direct `go generate ./...` sequence.
+
+### Fix
+
+Updated `.github/workflows/push.yml` so the test job now does the frontend setup before `go generate`:
+
+1. `pnpm -C ui install --frozen-lockfile`
+2. `pnpm -C ui run build`
+3. `go generate ./...`
+4. `go test ./...`
+5. `make review-widget-smoke`
+
+### Validation
+
+Locally reproduced the CI sequence successfully:
+
+```bash
+pnpm -C ui install --frozen-lockfile
+pnpm -C ui run build
+GOWORK=off go generate ./...
+GOWORK=off go test ./...
+GCB_SKIP_BUILD=1 make review-widget-smoke
+```
+
+All commands passed.

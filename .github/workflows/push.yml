@@ -25,6 +25,12 @@ jobs:
         name: enable pnpm
         run: corepack enable
       -
+        name: install frontend dependencies
+        run: pnpm -C ui install --frozen-lockfile
+      -
+        name: build frontend assets
+        run: pnpm -C ui run build
+      -
         name: generate assets
         run: go generate ./...
       -

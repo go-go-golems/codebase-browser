@@ -102,3 +102,12 @@ Completed Phase 8 CI/docs wiring: push workflow now runs make review-widget-smok
 
 Implemented robust review widget rendering contract: central directive registry, structured static review pages, direct frontend block rendering, removal of legacy stub hydration/static rendered-doc table, registry-driven strict validation, smoke fixture, CI smoke target, and updated docs.
 
+
+## 2026-05-03
+
+Fixed CI generate-assets failure by building ui/dist/public before go generate in the push workflow; locally validated pnpm install/build, go generate, go test, and review-widget-smoke.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/.github/workflows/push.yml — Builds frontend assets before go generate
+
