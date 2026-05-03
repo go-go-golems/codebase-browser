@@ -36,3 +36,5 @@ WhenToUse: "Use during review and handoff."
 - Committed the frontend sql.js performance implementation.
 - Uploaded the updated post-implementation guide bundle to reMarkable as `GCB-021 Frontend sql.js Performance Guide - Updated`.
 - Verified the fixed source page with Playwright: source+xref readiness in ~2.25s, source-ref query 82 rows in 19 ms, file xref queries 2 ms and 42 ms; the old 4183 export still times out/hangs on the same route.
+- Added a full postmortem report covering the sql.js source-page freeze, measurements, root cause, implemented fixes, Playwright validation, and Web Worker follow-up design.
+- Uploaded the postmortem bundle to reMarkable as `/ai/2026/05/03/GCB-021/GCB-021 sql.js Source Freeze Postmortem`.

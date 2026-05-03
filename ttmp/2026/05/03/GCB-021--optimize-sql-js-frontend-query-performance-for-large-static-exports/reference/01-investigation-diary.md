@@ -385,3 +385,55 @@ The pre-fix export at port 4183 still reproduced the hang. A Playwright run wait
 #### Remaining caveat
 
 The fixed page still performs repeated commit-list queries while route data loads. They are not currently the bottleneck, but repeated `listCommits()` calls may be worth caching or deduplicating in a later frontend cleanup ticket.
+
+### 2026-05-03 — Step 7: Write full postmortem report
+
+#### What changed
+
+- Added `design-doc/02-postmortem-sql-js-source-page-freeze-on-large-static-exports.md`.
+- The report consolidates the full incident: large Glazed export scale, profiler evidence, native SQLite timings, browser `?debugSql` timings, Playwright verification, root cause, implementation details, and the proposed Web Worker follow-up architecture.
+- Related the postmortem to the main frontend provider, sql.js DB/query helpers, source UI files, schema file, and CDP smoke script.
+
+#### Why
+
+The implementation guide explained the plan and the diary recorded chronological actions. The postmortem is meant to be the single onboarding artifact a new intern can read to understand the incident end-to-end and continue with Worker migration or further sql.js performance work.
+
+#### Next actions
+
+- Validate the ticket with `docmgr doctor`.
+- Upload the postmortem bundle to reMarkable.
+
+### 2026-05-03 — Step 8: Upload postmortem to reMarkable
+
+#### What changed
+
+- Uploaded the new postmortem report, diary, and tasks as a bundled PDF to reMarkable.
+
+#### Commands
+
+```bash
+remarquee upload bundle --dry-run \
+  design-doc/02-postmortem-sql-js-source-page-freeze-on-large-static-exports.md \
+  reference/01-investigation-diary.md \
+  tasks.md \
+  --name "GCB-021 sql.js Source Freeze Postmortem" \
+  --remote-dir /ai/2026/05/03/GCB-021 \
+  --toc-depth 2
+
+remarquee upload bundle ...
+remarquee cloud ls /ai/2026/05/03/GCB-021 --long --non-interactive
+```
+
+#### Result
+
+```text
+OK: uploaded GCB-021 sql.js Source Freeze Postmortem.pdf -> /ai/2026/05/03/GCB-021
+[f] GCB-021 Frontend sql.js Performance Guide
+[f] GCB-021 Frontend sql.js Performance Guide - Updated
+[f] GCB-021 sql.js Source Freeze Postmortem
+```
+
+#### What worked
+
+- The dry-run succeeded before the real upload.
+- The remote listing confirms the postmortem is present on reMarkable.
