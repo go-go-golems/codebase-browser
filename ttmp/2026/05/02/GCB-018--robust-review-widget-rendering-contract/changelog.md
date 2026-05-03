@@ -46,3 +46,13 @@ Implemented Phase 3 structured page model foundation with markdown/widget blocks
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/docs/renderer.go — Removed duplicate splitFields parser in favor of reviewwidgets helpers
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/reviewwidgets/page_model.go — Structured review page model and BuildPage
 
+
+## 2026-05-02
+
+Implemented Phase 4 structured export: static_review_pages is created and populated with blocks_json/diagnostics_json, strict export fails on structured diagnostics, and tests cover the new table.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/export_test.go — Asserts structured review page export
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/reviewdocs.go — Writes static_review_pages alongside temporary legacy rendered docs
+

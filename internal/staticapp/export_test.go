@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -89,6 +90,21 @@ func TestAddRenderedReviewDocsCreatesStaticTableOnCopiedDB(t *testing.T) {
 	}
 	if snippetsJSON != "[]" || errorsJSON != "[]" {
 		t.Fatalf("unexpected rendered metadata snippets=%s errors=%s", snippetsJSON, errorsJSON)
+	}
+
+	var blocksJSON, diagnosticsJSON string
+	if err := db.QueryRow(`
+		SELECT blocks_json, diagnostics_json
+		FROM static_review_pages
+		WHERE slug = 'fixture'
+	`).Scan(&blocksJSON, &diagnosticsJSON); err != nil {
+		t.Fatalf("query structured review page: %v", err)
+	}
+	if !strings.Contains(blocksJSON, `"type":"markdown"`) {
+		t.Fatalf("structured blocks do not contain markdown block: %s", blocksJSON)
+	}
+	if diagnosticsJSON != "[]" {
+		t.Fatalf("unexpected structured diagnostics: %s", diagnosticsJSON)
 	}
 }
 

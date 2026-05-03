@@ -9,6 +9,7 @@ import (
 
 	"github.com/wesen/codebase-browser/internal/docs"
 	"github.com/wesen/codebase-browser/internal/review"
+	"github.com/wesen/codebase-browser/internal/reviewwidgets"
 )
 
 const createRenderedReviewDocsSQL = `
@@ -18,6 +19,14 @@ CREATE TABLE IF NOT EXISTS static_review_rendered_docs (
     html TEXT NOT NULL,
     snippets_json TEXT NOT NULL DEFAULT '[]',
     errors_json TEXT NOT NULL DEFAULT '[]',
+    rendered_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS static_review_pages (
+    slug TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    blocks_json TEXT NOT NULL DEFAULT '[]',
+    diagnostics_json TEXT NOT NULL DEFAULT '[]',
     rendered_at INTEGER NOT NULL DEFAULT 0
 );
 `
@@ -79,6 +88,21 @@ func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string, strict 
 	renderedAt := time.Now().Unix()
 	for _, doc := range reviewDocs {
 		slug, title, content := doc.slug, doc.title, doc.content
+		structuredPage, buildErr := reviewwidgets.BuildPage(slug, []byte(content))
+		if buildErr != nil {
+			return fmt.Errorf("build structured review page %s: %w", slug, buildErr)
+		}
+		if structuredPage.Title != "" {
+			title = structuredPage.Title
+		}
+		if strict && len(structuredPage.Diagnostics) > 0 {
+			messages := make([]string, len(structuredPage.Diagnostics))
+			for i, diagnostic := range structuredPage.Diagnostics {
+				messages[i] = diagnostic.Message
+			}
+			return fmt.Errorf("render doc %s: %d structured page diagnostic(s): %s", slug, len(messages), strings.Join(messages, "; "))
+		}
+
 		page, renderErr := docs.Render(slug, []byte(content), loaded, sourceFS)
 		html := ""
 		snippetsJSON := "[]"
@@ -112,6 +136,28 @@ func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string, strict 
 			}
 			snippetsJSON = mustJSON(snippets)
 			errorsJSON = mustJSON(errs)
+		}
+
+		blocks := structuredPage.Blocks
+		if blocks == nil {
+			blocks = []reviewwidgets.Block{}
+		}
+		diagnostics := structuredPage.Diagnostics
+		if diagnostics == nil {
+			diagnostics = []reviewwidgets.Diagnostic{}
+		}
+		blocksJSON := mustJSON(blocks)
+		diagnosticsJSON := mustJSON(diagnostics)
+		if _, err := store.DB().ExecContext(ctx, `
+			INSERT INTO static_review_pages(slug, title, blocks_json, diagnostics_json, rendered_at)
+			VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT(slug) DO UPDATE SET
+				title = excluded.title,
+				blocks_json = excluded.blocks_json,
+				diagnostics_json = excluded.diagnostics_json,
+				rendered_at = excluded.rendered_at
+		`, slug, title, blocksJSON, diagnosticsJSON, renderedAt); err != nil {
+			return fmt.Errorf("upsert structured review page %s: %w", slug, err)
 		}
 
 		if _, err := store.DB().ExecContext(ctx, `

@@ -101,3 +101,27 @@ This is the first real removal of duplicated/deprecated contract logic: directiv
 ### Notes
 
 This phase introduces the future structured representation without switching the browser/export path yet. More deprecated code was removed safely: the renderer no longer owns a private directive-field parser. The next phase should persist this page model into SQLite (`static_review_pages`) while the old `static_review_rendered_docs` path still exists only long enough to compare behavior.
+
+## Step 5: Phase 4 export structured review pages to SQLite
+
+### What changed
+
+- Extended static review export schema with `static_review_pages`:
+  - `slug`
+  - `title`
+  - `blocks_json`
+  - `diagnostics_json`
+  - `rendered_at`
+- Updated `internal/staticapp/reviewdocs.go` so `AddRenderedReviewDocs` builds the structured page model with `reviewwidgets.BuildPage` for every review doc and writes it to `static_review_pages`.
+- In strict mode, structured page diagnostics now fail export before publishing.
+- Kept the legacy `static_review_rendered_docs` write path temporarily so the current frontend continues to work while Phase 5 replaces the reader/renderer.
+- Updated `internal/staticapp/export_test.go` to assert `static_review_pages` is created and contains markdown blocks with empty diagnostics.
+
+### Validation
+
+- `GOWORK=off go test ./internal/staticapp ./internal/reviewwidgets ./internal/docs ./internal/review` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+
+### Notes
+
+This is an intermediate bridge phase. Deprecated `static_review_rendered_docs` and DOM hydration are still present only because the frontend has not switched to `static_review_pages` yet. The next phase should update the sql.js provider and React page renderer to consume `blocks_json`; after that, the legacy rendered-doc table and stub path can be deleted.
