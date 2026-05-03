@@ -56,6 +56,12 @@ func TestExportCopiesDBWritesManifestAndOmitsLegacyRuntimeFiles(t *testing.T) {
 	if manifest.Runtime.QueryEngine != "sql.js" || manifest.Runtime.HasGoRuntimeServer {
 		t.Fatalf("unexpected runtime manifest: %+v", manifest.Runtime)
 	}
+	if manifest.DB.HistorySchemaVersion != "3" || manifest.DB.ReviewSchemaVersion != "2" {
+		t.Fatalf("unexpected schema versions in manifest: %+v", manifest.DB)
+	}
+	if manifest.DB.SchemaVersions["history_schema_version"] != "3" {
+		t.Fatalf("schema version map missing history version: %+v", manifest.DB.SchemaVersions)
+	}
 	if manifest.Commits.Count != 1 || manifest.Features.ReviewDocs {
 		t.Fatalf("unexpected manifest counts/features: commits=%+v features=%+v", manifest.Commits, manifest.Features)
 	}

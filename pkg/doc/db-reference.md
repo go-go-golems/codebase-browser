@@ -337,6 +337,18 @@ The `--commits` flag accepts any git log range specification:
 | `HEAD` | Just the current commit |
 | `--all` | All reachable commits |
 
+## Integrity validation
+
+Run the built-in validator before publishing or handing a long-history database to reviewers:
+
+```bash
+codebase-browser review db validate --db review.db
+```
+
+The validator checks commit-local consistency for the snapshot views. In particular, every `snapshot_symbols.file_id` must join to a `snapshot_files.id` in the same commit, and every `snapshot_refs.file_id` / `from_symbol_id` must join to commit-local file and symbol rows. These checks catch stale historical mappings that can otherwise surface as browser body-diff or xref failures.
+
+A healthy database prints `OK` and zero bad joins. Any non-zero count means the database should be rebuilt with the current schema and indexer.
+
 ## Troubleshooting
 
 | Problem | Cause | Solution |

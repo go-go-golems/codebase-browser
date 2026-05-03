@@ -113,15 +113,22 @@ func buildManifest(ctx context.Context, opts Options, dbOutPath string) (*Manife
 	if err != nil {
 		return nil, err
 	}
+	schemaVersions, err := inspectSchemaVersions(ctx, dbOutPath)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Manifest{
 		SchemaVersion: 1,
 		Kind:          manifestKind,
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		DB: DBManifest{
-			Path:          "db/codebase.db",
-			SizeBytes:     info.Size(),
-			SchemaVersion: 1,
+			Path:                 "db/codebase.db",
+			SizeBytes:            info.Size(),
+			SchemaVersion:        1,
+			HistorySchemaVersion: schemaVersions["history_schema_version"],
+			ReviewSchemaVersion:  schemaVersions["review_schema_version"],
+			SchemaVersions:       schemaVersions,
 		},
 		Features: FeatureManifest{
 			CodebaseBrowser: true,
@@ -170,6 +177,33 @@ func inspectCommits(ctx context.Context, dbPath string) (*commitInspection, erro
 		out.hasReviewDocs = reviewCount > 0
 	}
 	return out, nil
+}
+
+func inspectSchemaVersions(ctx context.Context, dbPath string) (map[string]string, error) {
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open output DB for schema versions: %w", err)
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `SELECT key, value FROM schema_info ORDER BY key`)
+	if err != nil {
+		return nil, fmt.Errorf("query schema_info: %w", err)
+	}
+	defer rows.Close()
+
+	versions := map[string]string{}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, fmt.Errorf("scan schema_info: %w", err)
+		}
+		versions[key] = value
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("schema_info rows: %w", err)
+	}
+	return versions, nil
 }
 
 func writeManifest(outDir string, manifest *Manifest) error {

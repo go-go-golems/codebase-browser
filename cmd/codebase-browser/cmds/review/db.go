@@ -11,6 +11,16 @@ import (
 )
 
 func newDBCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "db",
+		Short: "Review database utilities",
+	}
+	cmd.AddCommand(newDBCreateCmd())
+	cmd.AddCommand(newDBValidateCmd())
+	return cmd
+}
+
+func newDBCreateCmd() *cobra.Command {
 	var (
 		dbPath       string
 		repoRoot     string
@@ -21,7 +31,7 @@ func newDBCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "db create",
+		Use:   "create",
 		Short: "Create a review SQLite database from a commit range (no docs)",
 		Long: `Create a review database containing per-commit snapshots.
 

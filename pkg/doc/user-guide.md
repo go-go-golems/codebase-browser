@@ -140,6 +140,14 @@ A review export is a static directory plus a SQLite database. You can:
 
 The source review database produced by `review index` is also useful on its own as a SQLite artifact, but the browser runtime should use `review export` output.
 
+Before publishing a long-history export, validate the database integrity:
+
+```bash
+./bin/codebase-browser review db validate --db review.db
+```
+
+The validator checks that snapshot symbols and references point to files and symbols present in the same commit. This catches historical consistency bugs such as an unchanged symbol moving files while retaining the same body hash. Schema v3 preserves those moved symbol versions by including file/range location in the symbol version identity, so databases produced with older schema versions should be rebuilt before publishing large history exports.
+
 ## Querying the DB with an LLM
 
 After running `review db create --commits HEAD~10..HEAD --db review.db`, you have a queryable SQLite file. Here are example prompts for an LLM:

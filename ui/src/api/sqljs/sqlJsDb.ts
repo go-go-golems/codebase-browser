@@ -13,6 +13,9 @@ export interface StaticManifest {
     path?: string;
     sizeBytes?: number;
     schemaVersion?: number;
+    historySchemaVersion?: string;
+    reviewSchemaVersion?: string;
+    schemaVersions?: Record<string, string>;
   };
   features?: Record<string, boolean>;
   runtime?: Record<string, unknown>;

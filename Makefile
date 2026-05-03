@@ -2,7 +2,7 @@ GOLANGCI_LINT_VERSION ?= $(shell cat .golangci-lint-version)
 GOLANGCI_LINT_BIN  ?= $(CURDIR)/.bin/golangci-lint
 GOLANGCI_LINT_ARGS ?= --timeout=5m ./cmd/... ./pkg/...
 
-.PHONY: help frontend-check frontend-build generate build smoke clean tidy test lint lintmax docs-smoke review-widget-smoke golangci-lint-install bump-glazed
+.PHONY: help frontend-check frontend-build generate build smoke clean tidy test lint lintmax docs-smoke review-widget-smoke review-browser-smoke golangci-lint-install bump-glazed
 
 BINARY := codebase-browser
 PKG    := github.com/wesen/codebase-browser
@@ -19,6 +19,7 @@ help:
 	@echo "  lintmax         golangci-lint run with max-same-issues=100"
 	@echo "  docs-smoke      Smoke-test docs examples (index, export, verify)"
 	@echo "  review-widget-smoke  Strict all-widget review export smoke test"
+	@echo "  review-browser-smoke Source-page browser smoke test; pass URL=..."
 	@echo "  bump-glazed     Bump go-go-golems packages to latest"
 
 
@@ -94,6 +95,10 @@ docs-smoke:
 
 review-widget-smoke:
 	ttmp/2026/05/02/GCB-018--robust-review-widget-rendering-contract/scripts/01-review-widget-smoke.sh
+
+review-browser-smoke:
+	@if [ -z "$(URL)" ]; then echo "usage: make review-browser-smoke URL=http://127.0.0.1:4187/?debugSql#/source/path.go"; exit 2; fi
+	scripts/review-browser-smoke.py "$(URL)" $(ARGS)
 
 # Bump all go-go-golems packages to their latest versions.
 bump-glazed:
