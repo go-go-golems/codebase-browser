@@ -97,3 +97,8 @@ Completed Phase 8 CI/docs wiring: push workflow now runs make review-widget-smok
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/.github/workflows/push.yml — Runs review-widget-smoke in CI
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/pkg/doc/db-reference.md — Documents static_review_pages structured export table
 
+
+## 2026-05-02
+
+Implemented robust review widget rendering contract: central directive registry, structured static review pages, direct frontend block rendering, removal of legacy stub hydration/static rendered-doc table, registry-driven strict validation, smoke fixture, CI smoke target, and updated docs.
+
