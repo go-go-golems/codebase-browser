@@ -54,6 +54,14 @@ lintmax: golangci-lint-install
 	GOWORK=off $(GOLANGCI_LINT_BIN) config verify
 	GOWORK=off $(GOLANGCI_LINT_BIN) run -v --max-same-issues=100 $(GOLANGCI_LINT_ARGS)
 
+gosec:
+	GOWORK=off go install github.com/securego/gosec/v2/cmd/gosec@latest
+	gosec -exclude-generated -exclude=G101,G304,G301,G306 $(GOSEC_EXCLUDE_DIRS) $(LINT_DIRS)
+
+govulncheck:
+	GOWORK=off go install golang.org/x/vuln/cmd/govulncheck@latest
+	govulncheck ./...
+
 tidy:
 	go mod tidy
 
