@@ -32,7 +32,7 @@ generate:
 	go generate ./cmd/... ./internal/browser ./internal/docs ./internal/indexer ./internal/indexfs ./internal/sourcefs ./internal/staticapp
 
 
-build: frontend-build generate
+build: generate
 	go build -tags embed -o bin/$(BINARY) ./cmd/$(BINARY)
 
 smoke: build
