@@ -94,7 +94,7 @@ One row per unique file version (keyed by `stable_id` + `sha256`).
 
 #### `symbols`
 
-One row per unique symbol version (keyed by `stable_id` + `body_hash`). A "symbol" is any top-level declaration: function, method, type, const, var.
+One row per unique symbol body+location version (keyed by `stable_id` + `body_hash` + `file_id` + `start_offset` + `end_offset`). A "symbol" is any top-level declaration: function, method, type, const, var. File/range identity is part of the key so an unchanged symbol that moves files or offsets remains historically tied to the file version that existed in each commit.
 
 | Column | Type | Description |
 |--------|------|-------------|

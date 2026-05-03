@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -46,6 +47,116 @@ func TestLoadSnapshotRefVersionsIncludeLocations(t *testing.T) {
 	}
 	if startLine != 20 || endLine != 21 {
 		t.Fatalf("second snapshot ref range = %d-%d, want 20-21", startLine, endLine)
+	}
+}
+
+func TestLoadSnapshotPreservesMovedSymbolWithSameBody(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	store, err := Create(filepath.Join(root, "history.db"))
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	defer store.Close()
+
+	worktree := filepath.Join(root, "worktree")
+	if err := os.MkdirAll(worktree, 0o755); err != nil {
+		t.Fatalf("create worktree: %v", err)
+	}
+	body := []byte("package moved\n\nfunc Stable() {}\n")
+
+	if err := os.WriteFile(filepath.Join(worktree, "old.go"), body, 0o644); err != nil {
+		t.Fatalf("write old file: %v", err)
+	}
+	idx1 := movedSymbolFixtureIndex("file:old.go", "old.go", "sha-old", len(body))
+	if err := store.LoadSnapshot(ctx, gitutil.Commit{Hash: "1111111111111111111111111111111111111111", ShortHash: "1111111", AuthorTime: time.Unix(1, 0), Sequence: 1}, idx1, worktree); err != nil {
+		t.Fatalf("load old snapshot: %v", err)
+	}
+
+	if err := os.Remove(filepath.Join(worktree, "old.go")); err != nil {
+		t.Fatalf("remove old file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(worktree, "new.go"), body, 0o644); err != nil {
+		t.Fatalf("write new file: %v", err)
+	}
+	idx2 := movedSymbolFixtureIndex("file:new.go", "new.go", "sha-new", len(body))
+	if err := store.LoadSnapshot(ctx, gitutil.Commit{Hash: "2222222222222222222222222222222222222222", ShortHash: "2222222", AuthorTime: time.Unix(2, 0), Sequence: 2}, idx2, worktree); err != nil {
+		t.Fatalf("load new snapshot: %v", err)
+	}
+
+	var symbolVersions int
+	if err := store.DB().QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM symbols
+		WHERE stable_id = 'sym:example.com/moved.func.Stable'
+	`).Scan(&symbolVersions); err != nil {
+		t.Fatalf("count symbol versions: %v", err)
+	}
+	if symbolVersions != 2 {
+		t.Fatalf("symbol version count = %d, want 2", symbolVersions)
+	}
+
+	for _, tc := range []struct {
+		commit string
+		fileID string
+	}{
+		{commit: "1111111111111111111111111111111111111111", fileID: "file:old.go"},
+		{commit: "2222222222222222222222222222222222222222", fileID: "file:new.go"},
+	} {
+		var got string
+		if err := store.DB().QueryRowContext(ctx, `
+			SELECT file_id
+			FROM snapshot_symbols
+			WHERE commit_hash = ? AND id = 'sym:example.com/moved.func.Stable'
+		`, tc.commit).Scan(&got); err != nil {
+			t.Fatalf("query snapshot symbol for %s: %v", tc.commit[:7], err)
+		}
+		if got != tc.fileID {
+			t.Fatalf("snapshot file for %s = %s, want %s", tc.commit[:7], got, tc.fileID)
+		}
+
+		var joined int
+		if err := store.DB().QueryRowContext(ctx, `
+			SELECT COUNT(*)
+			FROM snapshot_symbols s
+			JOIN snapshot_files f ON f.commit_hash = s.commit_hash AND f.id = s.file_id
+			WHERE s.commit_hash = ? AND s.id = 'sym:example.com/moved.func.Stable'
+		`, tc.commit).Scan(&joined); err != nil {
+			t.Fatalf("query joined snapshot for %s: %v", tc.commit[:7], err)
+		}
+		if joined != 1 {
+			t.Fatalf("joined symbol/file rows for %s = %d, want 1", tc.commit[:7], joined)
+		}
+	}
+}
+
+func movedSymbolFixtureIndex(fileID, path, sha string, bodyLen int) *indexer.Index {
+	return &indexer.Index{
+		Version: "1",
+		Module:  "example.com/moved",
+		Packages: []indexer.Package{{
+			ID:         "pkg:example.com/moved",
+			ImportPath: "example.com/moved",
+			Name:       "moved",
+			FileIDs:    []string{fileID},
+			SymbolIDs:  []string{"sym:example.com/moved.func.Stable"},
+		}},
+		Files: []indexer.File{{
+			ID:        fileID,
+			Path:      path,
+			PackageID: "pkg:example.com/moved",
+			SHA256:    sha,
+			Language:  "go",
+		}},
+		Symbols: []indexer.Symbol{{
+			ID:        "sym:example.com/moved.func.Stable",
+			Kind:      "func",
+			Name:      "Stable",
+			PackageID: "pkg:example.com/moved",
+			FileID:    fileID,
+			Range:     indexer.Range{StartLine: 3, EndLine: 3, StartOffset: 15, EndOffset: bodyLen},
+			Language:  "go",
+		}},
 	}
 }
 

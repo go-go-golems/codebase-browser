@@ -69,7 +69,9 @@ CREATE TABLE files (
 );
 CREATE INDEX idx_files_sha ON files(sha256);
 
--- Symbols: one row per unique (stable_id, body_hash) version.
+-- Symbols: one row per unique symbol body+location version. File/range are
+-- part of the identity so unchanged symbols that move files or offsets do not
+-- collapse into a stale historical location.
 CREATE TABLE symbols (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     stable_id TEXT NOT NULL,          -- "sym:.../pkg.func.Name"
@@ -92,7 +94,7 @@ CREATE TABLE symbols (
     type_params_json TEXT NOT NULL DEFAULT '[]',
     tags_json TEXT NOT NULL DEFAULT '[]',
     body_hash TEXT NOT NULL DEFAULT '',
-    UNIQUE(stable_id, body_hash)
+    UNIQUE(stable_id, body_hash, file_id, start_offset, end_offset)
 );
 CREATE INDEX idx_symbols_name ON symbols(name);
 CREATE INDEX idx_symbols_kind ON symbols(kind);
@@ -125,7 +127,7 @@ CREATE TABLE schema_info (
     value TEXT NOT NULL
 );
 INSERT INTO schema_info(key, value) VALUES
-    ('history_schema_version', '2'),
+    ('history_schema_version', '3'),
     ('review_schema_version', '2');
 
 -- ----------------------------------------

@@ -161,7 +161,8 @@ INSERT OR IGNORE INTO commit_files(commit_id, file_id) VALUES (?, ?)`)
 	return result, nil
 }
 
-// loadSymbols inserts symbol versions (deduplicated by stable_id+body_hash) and their commit mapping.
+// loadSymbols inserts symbol versions (deduplicated by stable_id+body_hash+file+range)
+// and their commit mapping.
 // Returns a map from symbol stable_id -> integer symbol ID.
 func loadSymbols(ctx context.Context, tx *sql.Tx, commitID int64, symbols []indexer.Symbol, worktreeDir string) (map[string]int64, error) {
 	// Insert symbols. Use a two-step approach: first look up the integer IDs for
@@ -179,14 +180,22 @@ FROM commit_files cf
 JOIN files f ON f.id = cf.file_id
 WHERE cf.commit_id = ? AND f.stable_id = ?
 LIMIT 1
-ON CONFLICT(stable_id, body_hash) DO NOTHING
+ON CONFLICT(stable_id, body_hash, file_id, start_offset, end_offset) DO NOTHING
 RETURNING id`)
 	if err != nil {
 		return nil, fmt.Errorf("prepare symbol insert: %w", err)
 	}
 	defer symStmt.Close()
 
-	lookupStmt, err := tx.PrepareContext(ctx, `SELECT id FROM symbols WHERE stable_id = ? AND body_hash = ?`)
+	lookupStmt, err := tx.PrepareContext(ctx, `
+SELECT s.id
+FROM symbols s
+JOIN files f ON f.id = s.file_id
+WHERE s.stable_id = ?
+  AND s.body_hash = ?
+  AND f.stable_id = ?
+  AND s.start_offset = ?
+  AND s.end_offset = ?`)
 	if err != nil {
 		return nil, fmt.Errorf("prepare symbol lookup: %w", err)
 	}
@@ -227,7 +236,7 @@ INSERT OR IGNORE INTO commit_symbols(commit_id, symbol_id) VALUES (?, ?)`)
 		insertArgs := symbolInsertArgs(commitID, sym, lang, receiverType, receiverPointer, string(typeParams), string(tags), bodyHash)
 		symID, err := insertOrLookupID(ctx, symStmt, lookupStmt,
 			insertArgs,
-			[]any{sym.ID, bodyHash},
+			[]any{sym.ID, bodyHash, sym.FileID, sym.Range.StartOffset, sym.Range.EndOffset},
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert/lookup symbol %s: %w", sym.ID, err)
