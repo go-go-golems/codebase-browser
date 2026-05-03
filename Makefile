@@ -2,7 +2,7 @@ GOLANGCI_LINT_VERSION ?= $(shell cat .golangci-lint-version)
 GOLANGCI_LINT_BIN  ?= $(CURDIR)/.bin/golangci-lint
 GOLANGCI_LINT_ARGS ?= --timeout=5m ./cmd/... ./pkg/...
 
-.PHONY: help frontend-check frontend-build generate build smoke clean tidy test lint lintmax docs-smoke golangci-lint-install bump-glazed
+.PHONY: help frontend-check frontend-build generate build smoke clean tidy test lint lintmax docs-smoke review-widget-smoke golangci-lint-install bump-glazed
 
 BINARY := codebase-browser
 PKG    := github.com/wesen/codebase-browser
@@ -18,6 +18,7 @@ help:
 	@echo "  lint            golangci-lint run ./cmd/... ./pkg/..."
 	@echo "  lintmax         golangci-lint run with max-same-issues=100"
 	@echo "  docs-smoke      Smoke-test docs examples (index, export, verify)"
+	@echo "  review-widget-smoke  Strict all-widget review export smoke test"
 	@echo "  bump-glazed     Bump go-go-golems packages to latest"
 
 
@@ -82,6 +83,9 @@ docs-smoke:
 	  echo "docs-smoke: checking DB content..."; \
 	  sqlite3 "$$OUT/db/codebase.db" "SELECT slug FROM review_docs;" | grep -q "01-pr-review-static-export" || { echo "example doc not in export DB"; exit 1; }; \
 	  echo "docs-smoke: PASSED"
+
+review-widget-smoke:
+	ttmp/2026/05/02/GCB-018--robust-review-widget-rendering-contract/scripts/01-review-widget-smoke.sh
 
 # Bump all go-go-golems packages to their latest versions.
 bump-glazed:

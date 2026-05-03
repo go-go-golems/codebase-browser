@@ -15,3 +15,14 @@ Created intern-oriented analysis/design/implementation guide for replacing the i
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/api/sqlJsQueryProvider.ts — Runtime query provider considered for strict validation parity
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — Current DOM-scanning hydration path targeted for replacement
 
+
+## 2026-05-02
+
+Implemented Phase 1 smoke coverage: added all-widget fixture, strict export smoke shell script, optional Playwright visible-error scan, and Makefile target.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/Makefile — review-widget-smoke target
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/examples/all-widgets-smoke.md — All-widget strict review fixture
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ttmp/2026/05/02/GCB-018--robust-review-widget-rendering-contract/scripts/01-review-widget-smoke.sh — Strict index/export smoke runner
+
