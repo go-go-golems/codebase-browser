@@ -13,9 +13,16 @@ Intent: long-term
 Owners: []
 RelatedFiles:
     - Path: internal/history/schema.go
+    - Path: ttmp/2026/05/03/GCB-021--optimize-sql-js-frontend-query-performance-for-large-static-exports/scripts/01-source-page-cdp-smoke.py
+      Note: GCB-021 implementation and validation evidence
+    - Path: ui/src/api/sqlJsQueryProvider.test.ts
+      Note: GCB-021 implementation and validation evidence
     - Path: ui/src/api/sqlJsQueryProvider.ts
-      Note: GCB-021 measured source ref bottleneck in provider ref helpers
+      Note: |-
+        GCB-021 measured source ref bottleneck in provider ref helpers
+        GCB-021 implementation and validation evidence
     - Path: ui/src/api/sqljs/sqlRows.ts
+      Note: GCB-021 implementation and validation evidence
     - Path: ui/src/features/source/SourcePage.tsx
 ExternalSources: []
 Summary: Chronological investigation diary for frontend sql.js large-export performance work.
@@ -23,6 +30,10 @@ LastUpdated: 2026-05-03T16:38:05.058894386-04:00
 WhatFor: Record what was measured, changed, validated, and learned while optimizing sql.js frontend queries.
 WhenToUse: Use during GCB-021 implementation, review, and handoff.
 ---
+
+
+
+
 
 
 # Investigation diary
@@ -184,3 +195,115 @@ OK: uploaded GCB-021 Frontend sql.js Performance Guide.pdf -> /ai/2026/05/03/GCB
 #### Next actions
 
 Start implementation with SQL timing instrumentation in `ui/src/api/sqljs/sqlRows.ts`.
+
+### 2026-05-03 — Step 3: Implement sql.js instrumentation and normalized ref hot-path queries
+
+#### What changed
+
+- Added timing instrumentation to `ui/src/api/sqljs/sqlRows.ts`:
+  - `?debugSql` logs query start/done/error records.
+  - Queries over 1000 ms emit a slow-query warning even without `?debugSql`.
+  - Blob parameters are compacted as `<blob:N>` to avoid dumping large data into the console.
+- Rewrote reference hot paths in `ui/src/api/sqlJsQueryProvider.ts`:
+  - `getRefRecordsInFile`
+  - `getRefRecordsInFileRange`
+  - `getRefRecordsToFileSymbols`
+  - `getRefRecordsFromFileSymbols`
+  - `getRefRecordsFrom`
+  - `getRefRecordsTo`
+- Added `ui/src/api/sqlJsQueryProvider.test.ts` fixture coverage for:
+  - source refs loaded from normalized tables,
+  - snippet refs clipped to a symbol body range,
+  - file xrefs excluding intra-file refs.
+- Added CDP smoke script:
+  - `scripts/01-source-page-cdp-smoke.py`
+
+#### Commands
+
+```bash
+pnpm --dir ui test -- sqlJsQueryProvider.test.ts
+pnpm --dir ui typecheck
+GOWORK=off make build
+bin/codebase-browser review export --db /tmp/glazed-full.db --out /tmp/glazed-full-export-gcb021 --repo-root /home/manuel/code/wesen/corporate-headquarters/glazed --strict-docs
+GOWORK=off go test ./...
+python3 ttmp/2026/05/03/GCB-021--optimize-sql-js-frontend-query-performance-for-large-static-exports/scripts/01-source-page-cdp-smoke.py 'http://127.0.0.1:4184/?debugSql&v=gcb021#/source/pkg/help/publish/sqlite_validator.go' --timeout 60
+```
+
+#### Native SQLite timing check
+
+Before the rewrite, counting source refs through `snapshot_refs` took roughly 60 seconds for 82 rows.
+
+After the query-shape rewrite, equivalent normalized native timings were:
+
+```text
+source_refs: 82 rows, 0.008s
+used_by:      6 rows, 1.193s after join-order/index hint improvement
+uses:        70 rows, 0.379s after join-order/index hint improvement
+```
+
+The source-page freeze was caused by the source refs query, so the critical path improved from roughly 60 seconds native to milliseconds native.
+
+#### Browser validation result
+
+The Chromium CDP smoke script loaded:
+
+```text
+http://127.0.0.1:4184/?debugSql&v=gcb021#/source/pkg/help/publish/sqlite_validator.go
+```
+
+Result excerpt:
+
+```json
+{
+  "elapsedSeconds": 2.003,
+  "ready": true,
+  "bodyPreview": "Codebase Browser ... pkg/help/publish/sqlite_validator.go ... func ValidateSQLiteHelpDB ..."
+}
+```
+
+The page reached a source/xref-ready state in about two seconds in headless Chromium instead of appearing hung.
+
+#### What worked
+
+- Query-shape changes were enough to make the source page usable without moving sql.js to a Web Worker.
+- Provider tests caught an incorrect first version of the `getRefRecordsFromFileSymbols` rewrite: the query included an intra-file ref because a `LEFT JOIN commit_symbols` multiplied target candidates and produced null rows that passed the `COALESCE(..., '') != fileId` filter.
+- Rewriting the file-xref queries to start from `idx_ref_to` / `idx_ref_from` improved native timings for the xref panel.
+
+#### What did not work
+
+- A first Chromium `--dump-dom` attempt did not wait for the React/sql.js app to finish rendering; it only printed the initial shell.
+- The first CDP attempt failed with Chromium's remote origin protection:
+
+```text
+Handshake status 403 Forbidden ... Use the command line flag --remote-allow-origins=...
+```
+
+The script now launches Chromium with `--remote-allow-origins=*`.
+
+#### What was tricky
+
+- The CDP `Runtime.consoleAPICalled` events can be dropped when synchronous `Runtime.evaluate` calls are used for readiness polling; the script is still useful for route readiness and body validation, but console timing capture may need refinement if exact browser-side query logs are required.
+- The file `usedBy` query is inherently more expensive than source-local refs because it starts from target symbols and searches incoming references across the commit. It is now much faster than the view-based shape, but still worth monitoring on very large files.
+
+#### Code review instructions
+
+Reviewers should pay special attention to the SQL in `getRefRecordsFromFileSymbols`: it intentionally builds a current-commit `target_symbols` CTE and compares target file IDs there, rather than joining all `commit_symbols` rows directly. This avoids false positives for intra-file refs.
+
+### 2026-05-03 — Step 4: Commit implementation
+
+#### What changed
+
+- Committed the frontend performance implementation.
+- Marked task T18 complete.
+
+#### Command
+
+```bash
+git commit -m "Optimize sqljs ref queries for large exports"
+```
+
+#### Result
+
+```text
+[task/better-frontend-ui <amended>] Optimize sqljs ref queries for large exports
+```

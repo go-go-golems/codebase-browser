@@ -29,3 +29,8 @@ WhenToUse: "Use during review and handoff."
 - Added implementation task list for instrumentation, query rewrites, validation, and delivery.
 - Uploaded the design guide, diary, and tasks bundle to reMarkable at `/ai/2026/05/03/GCB-021/GCB-021 Frontend sql.js Performance Guide` after a dry run.
 - Added `frontend` and `sqljs` to the docmgr topic vocabulary so GCB-021 validates cleanly.
+- Added `?debugSql`/slow-query instrumentation around the shared sql.js query loop.
+- Rewrote frontend ref hot paths to query normalized base tables instead of the expensive `snapshot_refs` view, including source refs, snippet refs, file xrefs, and symbol-level from/to refs.
+- Added provider regression tests for normalized source refs, snippet refs, and file xrefs.
+- Rebuilt embedded SPA assets, exported the full Glazed site to `/tmp/glazed-full-export-gcb021`, and validated the source page with a Chromium CDP smoke script.
+- Committed the frontend sql.js performance implementation.

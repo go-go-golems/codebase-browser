@@ -29,27 +29,27 @@ WhenToUse: "Use during implementation and review."
 
 ## Instrumentation
 
-- [ ] T4. Add `?debugSql` timing around sql.js `queryAll` / `queryOne`.
-- [ ] T5. Add slow-query warning threshold for queries over 1000 ms.
-- [ ] T6. Validate instrumentation in the browser on the full Glazed export.
+- [x] T4. Add `?debugSql` timing around sql.js `queryAll` / `queryOne`.
+- [x] T5. Add slow-query warning threshold for queries over 1000 ms.
+- [x] T6. Validate instrumentation in the browser on the full Glazed export.
 
 ## Hot query rewrites
 
-- [ ] T7. Rewrite `getRefRecordsInFile` to query normalized base tables instead of `snapshot_refs`.
-- [ ] T8. Rewrite `getRefRecordsInFileRange` to query normalized base tables instead of `snapshot_refs`.
-- [ ] T9. Rewrite `getRefRecordsToFileSymbols` for file used-by xrefs.
-- [ ] T10. Rewrite `getRefRecordsFromFileSymbols` for file uses xrefs.
-- [ ] T11. Review symbol-level `getRefRecordsFrom` / `getRefRecordsTo` and decide whether they need the same treatment in this ticket.
+- [x] T7. Rewrite `getRefRecordsInFile` to query normalized base tables instead of `snapshot_refs`.
+- [x] T8. Rewrite `getRefRecordsInFileRange` to query normalized base tables instead of `snapshot_refs`.
+- [x] T9. Rewrite `getRefRecordsToFileSymbols` for file used-by xrefs.
+- [x] T10. Rewrite `getRefRecordsFromFileSymbols` for file uses xrefs.
+- [x] T11. Review symbol-level `getRefRecordsFrom` / `getRefRecordsTo` and decide whether they need the same treatment in this ticket.
 
 ## Tests and validation
 
-- [ ] T12. Add or update provider tests for source refs, snippet refs, and file xrefs.
-- [ ] T13. Run frontend tests and Go tests as applicable.
-- [ ] T14. Rebuild static assets and export the full Glazed site.
-- [ ] T15. Validate `/source/pkg/help/publish/sqlite_validator.go` with `?debugSql` and record timings.
+- [x] T12. Add or update provider tests for source refs, snippet refs, and file xrefs.
+- [x] T13. Run frontend tests and Go tests as applicable.
+- [x] T14. Rebuild static assets and export the full Glazed site.
+- [x] T15. Validate `/source/pkg/help/publish/sqlite_validator.go` with `?debugSql` and record timings.
 
 ## Delivery
 
-- [ ] T16. Update diary with every implementation step and measured result.
-- [ ] T17. Update changelog and relate key files through docmgr.
-- [ ] T18. Commit at appropriate intervals.
+- [x] T16. Update diary with every implementation step and measured result.
+- [x] T17. Update changelog and relate key files through docmgr.
+- [x] T18. Commit at appropriate intervals.

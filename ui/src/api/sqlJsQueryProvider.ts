@@ -693,68 +693,148 @@ export class SqlJsQueryProvider {
 
   private async getRefRecordsFrom(symbolId: string, commit: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ? AND from_symbol_id = ?
-      ORDER BY to_symbol_id, kind
+    return queryAll<RefRecordSQL>(db, normalizedRefRecordSelectSQL + `
+      JOIN symbols source_filter
+        ON source_filter.id = rv.from_symbol_id
+      WHERE c.hash = ?
+        AND source_filter.stable_id = ?
+      ORDER BY rv.to_stable_id, rv.kind
     `, [commit, symbolId]).map(toRefRecord);
   }
 
   private async getRefRecordsTo(symbolId: string, commit: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ? AND to_symbol_id = ?
-      ORDER BY from_symbol_id, kind
+    return queryAll<RefRecordSQL>(db, normalizedRefRecordSelectSQL + `
+      WHERE c.hash = ?
+        AND rv.to_stable_id = ?
+      ORDER BY s.stable_id, rv.kind
     `, [commit, symbolId]).map(toRefRecord);
   }
 
   private async getRefRecordsInFile(commit: string, fileId: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ? AND file_id = ?
-      ORDER BY start_offset, end_offset
+    return queryAll<RefRecordSQL>(db, normalizedRefRecordSelectSQL + `
+      WHERE c.hash = ?
+        AND f.stable_id = ?
+      ORDER BY startOffset, endOffset
     `, [commit, fileId]).map(toRefRecord);
   }
 
   private async getRefRecordsInFileRange(commit: string, fileId: string, startOffset: number, endOffset: number): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ?
-        AND file_id = ?
-        AND start_offset >= ?
-        AND end_offset <= ?
-      ORDER BY start_offset, end_offset
+    return queryAll<RefRecordSQL>(db, `
+      SELECT *
+      FROM (${normalizedRefRecordSelectSQL}
+        WHERE c.hash = ?
+          AND f.stable_id = ?
+      ) refs
+      WHERE refs.startOffset >= ?
+        AND refs.endOffset <= ?
+      ORDER BY refs.startOffset, refs.endOffset
     `, [commit, fileId, startOffset, endOffset]).map(toRefRecord);
   }
 
   private async getRefRecordsToFileSymbols(commit: string, fileId: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQLWithAlias + `
-      JOIN snapshot_symbols target
-        ON target.commit_hash = r.commit_hash
-       AND target.id = r.to_symbol_id
-      LEFT JOIN snapshot_symbols source
-        ON source.commit_hash = r.commit_hash
-       AND source.id = r.from_symbol_id
-      WHERE r.commit_hash = ?
-        AND target.file_id = ?
-        AND COALESCE(source.file_id, '') != ?
-      ORDER BY r.from_symbol_id, r.kind
+    return queryAll<RefRecordSQL>(db, `
+      WITH current_commit AS (
+        SELECT id
+        FROM commits
+        WHERE hash = ?
+      ),
+      target_symbols AS (
+        SELECT s.stable_id
+        FROM current_commit c
+        JOIN commit_symbols cs
+          ON cs.commit_id = c.id
+        JOIN symbols s
+          ON s.id = cs.symbol_id
+        JOIN files f
+          ON f.id = s.file_id
+        WHERE f.stable_id = ?
+      )
+      SELECT s.stable_id AS fromSymbolId,
+             rv.to_stable_id AS toSymbolId,
+             rv.kind,
+             f.stable_id AS fileId,
+             json_extract(j.value, '$.start_line') AS startLine,
+             json_extract(j.value, '$.start_col') AS startCol,
+             json_extract(j.value, '$.end_line') AS endLine,
+             json_extract(j.value, '$.end_col') AS endCol,
+             json_extract(j.value, '$.start_offset') AS startOffset,
+             json_extract(j.value, '$.end_offset') AS endOffset
+      FROM current_commit c
+      JOIN target_symbols target
+      JOIN ref_versions rv INDEXED BY idx_ref_to
+        ON rv.to_stable_id = target.stable_id
+      JOIN commit_refs cr
+        ON cr.commit_id = c.id
+       AND cr.ref_version_id = rv.id
+      JOIN symbols s
+        ON s.id = rv.from_symbol_id
+      JOIN files source_file
+        ON source_file.id = s.file_id
+      JOIN files f
+        ON f.id = rv.file_id
+      JOIN json_each(rv.locations_json) j
+      WHERE source_file.stable_id != ?
+      ORDER BY s.stable_id, rv.kind
     `, [commit, fileId, fileId]).map(toRefRecord);
   }
 
   private async getRefRecordsFromFileSymbols(commit: string, fileId: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQLWithAlias + `
-      JOIN snapshot_symbols source
-        ON source.commit_hash = r.commit_hash
-       AND source.id = r.from_symbol_id
-      LEFT JOIN snapshot_symbols target
-        ON target.commit_hash = r.commit_hash
-       AND target.id = r.to_symbol_id
-      WHERE r.commit_hash = ?
-        AND source.file_id = ?
-        AND COALESCE(target.file_id, '') != ?
-      ORDER BY r.to_symbol_id, r.kind
+    return queryAll<RefRecordSQL>(db, `
+      WITH current_commit AS (
+        SELECT id
+        FROM commits
+        WHERE hash = ?
+      ),
+      source_symbols AS (
+        SELECT s.id, s.stable_id
+        FROM current_commit c
+        JOIN commit_symbols cs
+          ON cs.commit_id = c.id
+        JOIN symbols s
+          ON s.id = cs.symbol_id
+        JOIN files f
+          ON f.id = s.file_id
+        WHERE f.stable_id = ?
+      ),
+      target_symbols AS (
+        SELECT s.stable_id, f.stable_id AS file_id
+        FROM current_commit c
+        JOIN commit_symbols cs
+          ON cs.commit_id = c.id
+        JOIN symbols s
+          ON s.id = cs.symbol_id
+        JOIN files f
+          ON f.id = s.file_id
+      )
+      SELECT source.stable_id AS fromSymbolId,
+             rv.to_stable_id AS toSymbolId,
+             rv.kind,
+             f.stable_id AS fileId,
+             json_extract(j.value, '$.start_line') AS startLine,
+             json_extract(j.value, '$.start_col') AS startCol,
+             json_extract(j.value, '$.end_line') AS endLine,
+             json_extract(j.value, '$.end_col') AS endCol,
+             json_extract(j.value, '$.start_offset') AS startOffset,
+             json_extract(j.value, '$.end_offset') AS endOffset
+      FROM current_commit c
+      JOIN source_symbols source
+      JOIN ref_versions rv INDEXED BY idx_ref_from
+        ON rv.from_symbol_id = source.id
+      JOIN commit_refs cr
+        ON cr.commit_id = c.id
+       AND cr.ref_version_id = rv.id
+      JOIN files f
+        ON f.id = rv.file_id
+      LEFT JOIN target_symbols target
+        ON target.stable_id = rv.to_stable_id
+      JOIN json_each(rv.locations_json) j
+      WHERE COALESCE(target.file_id, '') != ?
+      ORDER BY rv.to_stable_id, rv.kind
     `, [commit, fileId, fileId]).map(toRefRecord);
   }
 
@@ -768,36 +848,27 @@ export class SqlJsQueryProvider {
   }
 }
 
-const refRecordColumnsSQL = `
-  from_symbol_id AS fromSymbolId,
-  to_symbol_id AS toSymbolId,
-  kind,
-  file_id AS fileId,
-  start_line AS startLine,
-  start_col AS startCol,
-  end_line AS endLine,
-  end_col AS endCol,
-  start_offset AS startOffset,
-  end_offset AS endOffset
-`;
-
-const refRecordSelectSQL = `
-  SELECT ${refRecordColumnsSQL}
-  FROM snapshot_refs
-`;
-
-const refRecordSelectSQLWithAlias = `
-  SELECT r.from_symbol_id AS fromSymbolId,
-         r.to_symbol_id AS toSymbolId,
-         r.kind,
-         r.file_id AS fileId,
-         r.start_line AS startLine,
-         r.start_col AS startCol,
-         r.end_line AS endLine,
-         r.end_col AS endCol,
-         r.start_offset AS startOffset,
-         r.end_offset AS endOffset
-  FROM snapshot_refs r
+const normalizedRefRecordSelectSQL = `
+  SELECT s.stable_id AS fromSymbolId,
+         rv.to_stable_id AS toSymbolId,
+         rv.kind,
+         f.stable_id AS fileId,
+         json_extract(j.value, '$.start_line') AS startLine,
+         json_extract(j.value, '$.start_col') AS startCol,
+         json_extract(j.value, '$.end_line') AS endLine,
+         json_extract(j.value, '$.end_col') AS endCol,
+         json_extract(j.value, '$.start_offset') AS startOffset,
+         json_extract(j.value, '$.end_offset') AS endOffset
+  FROM commits c
+  JOIN commit_refs cr
+    ON cr.commit_id = c.id
+  JOIN ref_versions rv
+    ON rv.id = cr.ref_version_id
+  JOIN symbols s
+    ON s.id = rv.from_symbol_id
+  JOIN files f
+    ON f.id = rv.file_id
+  JOIN json_each(rv.locations_json) j
 `;
 
 function toSnippetRef(row: ReviewSnippetSQL): SnippetRef {
