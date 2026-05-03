@@ -34,3 +34,4 @@ WhenToUse: "Use during review and handoff."
 - Added provider regression tests for normalized source refs, snippet refs, and file xrefs.
 - Rebuilt embedded SPA assets, exported the full Glazed site to `/tmp/glazed-full-export-gcb021`, and validated the source page with a Chromium CDP smoke script.
 - Committed the frontend sql.js performance implementation.
+- Uploaded the updated post-implementation guide bundle to reMarkable as `GCB-021 Frontend sql.js Performance Guide - Updated`.

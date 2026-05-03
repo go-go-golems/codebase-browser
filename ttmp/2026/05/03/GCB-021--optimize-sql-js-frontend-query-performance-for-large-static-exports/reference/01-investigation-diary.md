@@ -307,3 +307,25 @@ git commit -m "Optimize sqljs ref queries for large exports"
 ```text
 [task/better-frontend-ui <amended>] Optimize sqljs ref queries for large exports
 ```
+
+### 2026-05-03 — Step 5: Upload updated post-implementation bundle
+
+#### What changed
+
+- Uploaded the updated design guide, diary, and tasks after implementation and validation.
+
+#### Commands
+
+```bash
+remarquee upload bundle --dry-run ... --name "GCB-021 Frontend sql.js Performance Guide - Updated" --remote-dir /ai/2026/05/03/GCB-021
+remarquee upload bundle ... --name "GCB-021 Frontend sql.js Performance Guide - Updated" --remote-dir /ai/2026/05/03/GCB-021
+remarquee cloud ls /ai/2026/05/03/GCB-021 --long --non-interactive
+```
+
+#### Result
+
+```text
+OK: uploaded GCB-021 Frontend sql.js Performance Guide - Updated.pdf -> /ai/2026/05/03/GCB-021
+[f] GCB-021 Frontend sql.js Performance Guide
+[f] GCB-021 Frontend sql.js Performance Guide - Updated
+```
