@@ -39,3 +39,9 @@ pnpm-debug.log*
 dist/
 .tools/
 .playwright-mcp/
+
+# Large local investigation databases
+/glazed-full.db
+/glazed.db
+*.db-shm
+*.db-wal
