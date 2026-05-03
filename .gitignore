@@ -45,3 +45,5 @@ dist/
 /glazed.db
 *.db-shm
 *.db-wal
+
+/glazed-full-gcb025.db
