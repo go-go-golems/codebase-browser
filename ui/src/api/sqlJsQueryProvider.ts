@@ -163,6 +163,10 @@ type SymbolSQL = SqlRow & {
 };
 
 export class SqlJsQueryProvider implements CodebaseQueryProvider {
+  private commitsPromise: Promise<CommitRow[]> | null = null;
+  private readonly resolvedCommitRefs = new Map<string, Promise<string>>();
+  private readonly commitsByRef = new Map<string, Promise<CommitRow>>();
+
   constructor(private readonly loadDb: DbLoader = getStaticDb) {}
 
   private async getDb(): Promise<Database> {
@@ -308,25 +312,45 @@ export class SqlJsQueryProvider implements CodebaseQueryProvider {
   }
 
   async listCommits(): Promise<CommitRow[]> {
-    const db = await this.getDb();
-    return queryAll<CommitRowSQL>(db, `
-      SELECT hash AS Hash,
-             short_hash AS ShortHash,
-             message AS Message,
-             author_name AS AuthorName,
-             author_email AS AuthorEmail,
-             author_time AS AuthorTime,
-             indexed_at AS IndexedAt,
-             sequence AS Sequence,
-             branch AS Branch,
-             error AS Error
-      FROM commits
-      WHERE error = ''
-      ORDER BY sequence DESC, author_time DESC
-    `).map((row) => ({ ...row }));
+    let commits = this.commitsPromise;
+    if (!commits) {
+      commits = (async () => {
+        const db = await this.getDb();
+        return queryAll<CommitRowSQL>(db, `
+          SELECT hash AS Hash,
+                 short_hash AS ShortHash,
+                 message AS Message,
+                 author_name AS AuthorName,
+                 author_email AS AuthorEmail,
+                 author_time AS AuthorTime,
+                 indexed_at AS IndexedAt,
+                 sequence AS Sequence,
+                 branch AS Branch,
+                 error AS Error
+          FROM commits
+          WHERE error = ''
+          ORDER BY sequence DESC, author_time DESC
+        `).map((row) => ({ ...row }));
+      })();
+      this.commitsPromise = commits;
+    }
+    return commits.then((rows) => rows.map((row) => ({ ...row })));
   }
 
   async resolveCommitRef(ref: string): Promise<string> {
+    const normalizedRef = ref || 'HEAD';
+    let resolved = this.resolvedCommitRefs.get(normalizedRef);
+    if (!resolved) {
+      resolved = this.resolveCommitRefUncached(normalizedRef).catch((error) => {
+        this.resolvedCommitRefs.delete(normalizedRef);
+        throw error;
+      });
+      this.resolvedCommitRefs.set(normalizedRef, resolved);
+    }
+    return resolved;
+  }
+
+  private async resolveCommitRefUncached(ref: string): Promise<string> {
     const commits = await this.listCommits();
     if (commits.length === 0) throw new QueryError('NOT_FOUND', 'no indexed commits in database');
 
@@ -341,7 +365,7 @@ export class SqlJsQueryProvider implements CodebaseQueryProvider {
       newest: newest ? { hash: newest.Hash, shortHash: newest.ShortHash, message: newest.Message } : undefined,
       oldest: oldest ? { hash: oldest.Hash, shortHash: oldest.ShortHash, message: oldest.Message } : undefined,
     };
-    if (!ref || ref === 'HEAD') return newest.Hash;
+    if (ref === 'HEAD') return newest.Hash;
 
     const headOffset = ref.match(/^HEAD~(\d+)$/);
     if (headOffset) {
@@ -378,11 +402,22 @@ export class SqlJsQueryProvider implements CodebaseQueryProvider {
   }
 
   async getCommit(ref: string): Promise<CommitRow> {
-    const hash = await this.resolveCommitRef(ref);
-    const commits = await this.listCommits();
-    const commit = commits.find((row) => row.Hash === hash);
-    if (!commit) throw new QueryError('NOT_FOUND', `commit not found: ${ref}`);
-    return commit;
+    const normalizedRef = ref || 'HEAD';
+    let commit = this.commitsByRef.get(normalizedRef);
+    if (!commit) {
+      commit = (async () => {
+        const hash = await this.resolveCommitRef(normalizedRef);
+        const commits = await this.listCommits();
+        const row = commits.find((candidate) => candidate.Hash === hash);
+        if (!row) throw new QueryError('NOT_FOUND', `commit not found: ${ref}`);
+        return Object.freeze({ ...row });
+      })().catch((error) => {
+        this.commitsByRef.delete(normalizedRef);
+        throw error;
+      });
+      this.commitsByRef.set(normalizedRef, commit);
+    }
+    return commit.then((row) => ({ ...row }));
   }
 
   async getSymbolHistory(symbolId: string): Promise<SymbolHistoryEntry[]> {

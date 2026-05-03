@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import initSqlJs from 'sql.js';
 import type initSqlJsTypes from 'sql.js';
 import { describe, expect, it } from 'vitest';
@@ -163,6 +164,32 @@ describe('SqlJsQueryProvider commit refs', () => {
     });
   });
 
+  it('caches commit list, resolved refs, and commit lookups for immutable static exports', async () => {
+    await withProvider(async (provider, db) => {
+      insertCommit(db, 'aaaa111111111111111111111111111111111111', 'aaaa111', 100);
+      insertCommit(db, 'bbbb222222222222222222222222222222222222', 'bbbb222', 200);
+
+      const originalPrepare = db.prepare.bind(db);
+      let commitListQueries = 0;
+      db.prepare = ((sql: string) => {
+        if (sql.includes('FROM commits') && sql.includes('ORDER BY sequence DESC')) {
+          commitListQueries++;
+        }
+        return originalPrepare(sql);
+      }) as typeof db.prepare;
+
+      expect(await provider.resolveCommitRef('HEAD')).toBe('bbbb222222222222222222222222222222222222');
+      expect(await provider.resolveCommitRef('HEAD')).toBe('bbbb222222222222222222222222222222222222');
+      expect((await provider.listCommits()).map((commit) => commit.Hash)).toEqual([
+        'bbbb222222222222222222222222222222222222',
+        'aaaa111111111111111111111111111111111111',
+      ]);
+      expect((await provider.getCommit('HEAD')).Hash).toBe('bbbb222222222222222222222222222222222222');
+      expect((await provider.getCommit('HEAD')).Hash).toBe('bbbb222222222222222222222222222222222222');
+      expect(commitListQueries).toBe(1);
+    });
+  });
+
   it('resolves HEAD, HEAD~N, exact hashes, short hashes, and unique prefixes', async () => {
     await withProvider(async (provider, db) => {
       insertCommit(db, 'aaaa111111111111111111111111111111111111', 'aaaa111', 100);
@@ -181,9 +208,11 @@ describe('SqlJsQueryProvider commit refs', () => {
   });
 
   it('reports missing, empty, and ambiguous refs with structured query errors', async () => {
-    await withProvider(async (provider, db) => {
+    await withProvider(async (provider) => {
       await expect(provider.resolveCommitRef('HEAD')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
 
+    await withProvider(async (provider, db) => {
       insertCommit(db, 'abc1111111111111111111111111111111111111', 'abc1111', 100);
       insertCommit(db, 'abc2222222222222222222222222222222222222', 'abc2222', 200);
 
@@ -208,6 +237,14 @@ describe('SqlJsQueryProvider commit refs', () => {
         expect(error).toBeInstanceOf(QueryError);
       }
     });
+  });
+});
+
+describe('SqlJsQueryProvider hot-path SQL regressions', () => {
+  it('does not use snapshot_refs in frontend provider hot paths', () => {
+    const source = readFileSync(new URL('./sqlJsQueryProvider.ts', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('snapshot_refs');
   });
 });
 
