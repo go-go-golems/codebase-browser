@@ -19,4 +19,4 @@
 - [x] Phase 5: Update sql.js provider and React review page to render structured blocks directly.
 - [x] Phase 6: Delete remaining legacy doc-page stub HTML path; review/static pages no longer emit or hydrate HTML stubs.
 - [x] Phase 7: Make strict docs validation cover every directive and commit-walk child step.
-- [ ] Phase 8: Wire CI/docs-smoke to run strict export plus Playwright review-widget validation.
+- [x] Phase 8: Wire CI/docs-smoke to run strict export plus review-widget validation.

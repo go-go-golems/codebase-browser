@@ -87,3 +87,13 @@ Removed remaining active stub hydration code: generic doc page now no longer sca
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/app/App.tsx — Removed empty generic Docs sidebar section
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/DocPage.tsx — Deprecated DOM hydration implementation removed
 
+
+## 2026-05-02
+
+Completed Phase 8 CI/docs wiring: push workflow now runs make review-widget-smoke and db-reference documents static_review_pages instead of the removed rendered-doc table.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/.github/workflows/push.yml — Runs review-widget-smoke in CI
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/pkg/doc/db-reference.md — Documents static_review_pages structured export table
+

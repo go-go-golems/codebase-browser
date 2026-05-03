@@ -25,9 +25,9 @@ Two separate DB paths matter:
 | DB | Produced by | Use |
 |----|-------------|-----|
 | **Source DB** | `review index` or `review db create` | Query with `sqlite3`, hand to an LLM, or use as input to `review export` |
-| **Export DB** (`db/codebase.db`) | `review export` (copies and enriches the source DB) | The static browser opens this file with sql.js. Contains `static_review_rendered_docs` and rendered HTML. |
+| **Export DB** (`db/codebase.db`) | `review export` (copies and enriches the source DB) | The static browser opens this file with sql.js. Contains `static_review_pages` with structured markdown/widget blocks. |
 
-`review export` copies the source DB to `db/codebase.db` in the output directory, then writes `static_review_rendered_docs` rows into the output DB. The source DB is never modified.
+`review export` copies the source DB to `db/codebase.db` in the output directory, then writes `static_review_pages` rows into the output DB. The source DB is never modified.
 
 ## Database structure
 
@@ -225,7 +225,7 @@ One row per resolved `codebase-*` directive in a review doc.
 |--------|------|-------------|
 | `id` | INTEGER PK | Auto-increment |
 | `doc_id` | INTEGER FK | References `review_docs(id)` |
-| `stub_id` | TEXT | e.g. `stub-1` |
+| `stub_id` | TEXT | Stable per-document snippet key such as `stub-1` (retained as a snippet identifier, not an HTML mount stub) |
 | `directive` | TEXT | `codebase-snippet`, `codebase-diff`, etc. |
 | `symbol_id` | TEXT | Resolved symbol ID |
 | `file_path` | TEXT | Source file path |
@@ -236,17 +236,16 @@ One row per resolved `codebase-*` directive in a review doc.
 | `start_line` / `end_line` | INTEGER | Line range |
 | `commit_hash` | TEXT | If `commit=` was specified |
 
-### `static_review_rendered_docs`
+### `static_review_pages`
 
-One row per rendered review document in the exported browser database (`db/codebase.db`). This table is populated by `review export`, not by `review index`.
+One row per structured review document in the exported browser database (`db/codebase.db`). This table is populated by `review export`, not by `review index`. The browser renders the ordered block model directly; it does not scan HTML for widget placeholders.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `slug` | TEXT PK | Review document slug |
-| `title` | TEXT | Rendered document title |
-| `html` | TEXT | Export-time rendered HTML with widget placeholders |
-| `snippets_json` | TEXT | JSON array of resolved snippet/widget metadata |
-| `errors_json` | TEXT | JSON array of render errors; `[]` when clean |
+| `title` | TEXT | Review document title |
+| `blocks_json` | TEXT | JSON array of ordered blocks. Markdown blocks contain rendered HTML; widget blocks contain directive names and params. |
+| `diagnostics_json` | TEXT | JSON array of structured render/validation diagnostics; `[]` when clean |
 | `rendered_at` | INTEGER | Unix timestamp when export rendered the document |
 
 ## Common SQL queries

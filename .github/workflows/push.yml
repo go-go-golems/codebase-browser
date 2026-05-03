@@ -18,9 +18,18 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      -
+        name: enable pnpm
+        run: corepack enable
       -
         name: generate assets
         run: go generate ./...
       -
         name: run unit tests
         run: go test ./...
+      -
+        name: review widget smoke
+        run: make review-widget-smoke

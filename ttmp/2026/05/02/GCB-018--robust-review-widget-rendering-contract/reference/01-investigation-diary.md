@@ -209,3 +209,23 @@ This completes the strict-validation parity part of GCB-018 for commit refs: whe
 ### Notes
 
 This completes the cleanup the user explicitly asked for: the deprecated review/static-export widget contract is not just bypassed, it has been removed from the active frontend and static export path. `docs.Render` remains as the directive resolver/snippet extractor for indexing, but it no longer produces widget mount stubs.
+
+## Step 9: Phase 8 CI wiring and public docs update
+
+### What changed
+
+- Added `make review-widget-smoke` to the push workflow so CI performs the strict all-widget review export smoke test.
+- Added Node/corepack setup in the push workflow because the smoke test may build the embedded SPA binary when `GCB_SKIP_BUILD` is not set.
+- Updated `pkg/doc/db-reference.md` to document `static_review_pages` instead of the removed `static_review_rendered_docs` table.
+- Clarified that `review_doc_snippets.stub_id` is now a stable snippet key, not an HTML mount-stub contract.
+
+### Validation
+
+- `GOWORK=off go test ./...` passed.
+- `pnpm -C ui run typecheck` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+- Source search shows no active documentation references to `static_review_rendered_docs` outside generated embedded source snapshots.
+
+### Notes
+
+The local smoke script still treats Playwright as optional because the repository does not yet declare a Playwright package dependency. CI now at least guarantees the strict index/export and SQLite-level structured-page smoke. If we want browser-level CI, the next small follow-up is to add Playwright as an explicit UI dev dependency and install browsers in the workflow.
