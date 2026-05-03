@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { normalizeQueryError, type ProviderError } from './queryErrors';
-import { getSqlJsProvider } from './sqlJsQueryProvider';
+import { getSqlJsProvider } from './sqlJsProviderRegistry';
 
 export interface CommitRow {
   Hash: string;

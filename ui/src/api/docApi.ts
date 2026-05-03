@@ -1,5 +1,5 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
-import { getSqlJsProvider } from './sqlJsQueryProvider';
+import { getSqlJsProvider } from './sqlJsProviderRegistry';
 import { normalizeQueryError, type ProviderError } from './queryErrors';
 
 export interface SnippetRef {

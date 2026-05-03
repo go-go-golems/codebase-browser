@@ -14,6 +14,7 @@ import type {
   SymbolDiff,
   SymbolHistoryEntry,
 } from './historyApi';
+import type { CodebaseQueryProvider, ImpactQueryOptions } from './queryProvider';
 import type initSqlJs from 'sql.js';
 
 import { QueryError } from './queryErrors';
@@ -161,18 +162,7 @@ type SymbolSQL = SqlRow & {
   tagsJson: string;
 };
 
-let provider: SqlJsQueryProvider | null = null;
-
-export function getSqlJsProvider(): SqlJsQueryProvider {
-  if (!provider) provider = new SqlJsQueryProvider();
-  return provider;
-}
-
-export function resetSqlJsProviderForTests(): void {
-  provider = null;
-}
-
-export class SqlJsQueryProvider {
+export class SqlJsQueryProvider implements CodebaseQueryProvider {
   constructor(private readonly loadDb: DbLoader = getStaticDb) {}
 
   private async getDb(): Promise<Database> {
@@ -469,12 +459,7 @@ export class SqlJsQueryProvider {
     };
   }
 
-  async getImpact(options: {
-    symbolId: string;
-    direction: 'usedby' | 'uses';
-    depth: number;
-    commit?: string;
-  }): Promise<ImpactResponse> {
+  async getImpact(options: ImpactQueryOptions): Promise<ImpactResponse> {
     const commit = await this.resolveCommitRef(options.commit ?? 'HEAD');
     const direction = options.direction;
     const maxDepth = Math.max(1, Math.min(options.depth, 5));

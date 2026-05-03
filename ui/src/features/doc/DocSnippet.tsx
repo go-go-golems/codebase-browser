@@ -2,7 +2,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useGetSymbolQuery } from '../../api/indexApi';
-import { getSqlJsProvider } from '../../api/sqlJsQueryProvider';
+import { getSqlJsProvider } from '../../api/sqlJsProviderRegistry';
 import { ExpandableSymbol } from '../symbol/ExpandableSymbol';
 import { XrefPanel } from '../symbol/XrefPanel';
 import { Code } from '../../packages/ui/src/Code';
