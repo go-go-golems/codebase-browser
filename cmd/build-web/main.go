@@ -210,7 +210,7 @@ func copyTree(src, dst string) error {
 	})
 }
 
-func copyFile(src, dst string, mode fs.FileMode) error {
+func copyFile(src, dst string, mode fs.FileMode) (err error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
@@ -218,12 +218,16 @@ func copyFile(src, dst string, mode fs.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() {
+		err = errors.Join(err, in.Close())
+	}()
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		err = errors.Join(err, out.Close())
+	}()
 	_, err = io.Copy(out, in)
 	return err
 }

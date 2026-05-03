@@ -40,3 +40,15 @@ Validated the default Dagger path from a clean ui/dist/internal/staticapp/embed/
 
 Implemented and validated Dagger-backed frontend generation: go generate ./internal/staticapp now runs cmd/build-web, exports Vite assets into internal/staticapp/embed/public, Makefile/CI rely on go generate, and both local fallback plus default Dagger paths were validated.
 
+
+## 2026-05-03
+
+Addressed CI/PR feedback: checked build-web file close errors, preserved incremental sequence monotonicity, included ref locations in version identity, and matched review widgets to snippets by stable IDs.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/cmd/build-web/main.go — copyFile now checks Close errors
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/history/loader.go — ref version identity now includes locations_json
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/indexer.go — incremental sequence assignment now starts above existing max sequence
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — review widgets now match snippets by stable block/snippet ID
+

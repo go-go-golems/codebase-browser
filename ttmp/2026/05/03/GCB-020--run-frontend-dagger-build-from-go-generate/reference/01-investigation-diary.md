@@ -74,3 +74,32 @@ generate_staticapp: wrote internal/staticapp/embed/public
 ```
 
 So `go generate ./internal/staticapp` now actually runs the Dagger pnpm frontend build and exports the Vite output into the embed directory from a clean state.
+
+## Step 4: Address CI lint failure and PR review comments
+
+### What changed
+
+- Fixed the GitHub Actions lint failure in `cmd/build-web/main.go` by checking both input and output file close errors in `copyFile` with `errors.Join`.
+- Addressed PR comment P1 on incremental review indexing sequences:
+  - Added `history.Store.MaxSequence`.
+  - Incremental review indexing now assigns new commit sequences above the existing maximum instead of restarting at `len(batch)`.
+  - Added a unit test for sequence assignment.
+- Addressed PR comment P1 on normalized ref versions:
+  - Included `locations_json` in the `ref_versions` uniqueness key.
+  - Updated ref insert conflict handling and lookup to include `locations_json`.
+  - Sorted ref locations before marshaling so the JSON identity is deterministic.
+  - Added a history loader test proving the same `(from,to,kind,file)` ref at a moved location produces a distinct version and the later snapshot exposes the new range.
+- Addressed PR comment P2 on review widget/snippet matching:
+  - Structured review widget block IDs now use the same `stub-N` namespace as stored snippet rows.
+  - `docs.Render` increments the snippet ID counter for every directive, including failed resolutions, so later successful snippets keep their stable block ID.
+  - `ReviewDocPage` now maps snippets by `stubId` instead of array index, avoiding shifted widgets in non-strict exports.
+
+### Validation
+
+- `GOWORK=off go test ./cmd/build-web ./internal/history ./internal/review ./internal/reviewwidgets ./internal/staticapp`
+- `pnpm -C ui run typecheck`
+- `GOWORK=off go test ./...`
+- `BUILD_WEB_LOCAL=1 GOWORK=off make build`
+- `GCB_SKIP_BUILD=1 make review-widget-smoke`
+
+All commands passed.

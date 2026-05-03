@@ -68,10 +68,6 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 			return nil, fmt.Errorf("parse commit range %q: %w", opts.CommitRange, err)
 		}
 
-		for i := range commits {
-			commits[i].Sequence = len(commits) - i
-		}
-
 		// ── Phase 2: index commits ──
 		// Multi-commit review databases must contain source/symbol/ref snapshots for
 		// each commit, not the current checkout repeated N times. The current
@@ -102,6 +98,16 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 		} else if skipped > 0 {
 			fmt.Fprintf(os.Stderr, "Indexing %d new commits (skipping %d existing)\n", len(toIndex), skipped)
 		}
+
+		baseSequence := 0
+		if opts.Incremental {
+			var err error
+			baseSequence, err = store.History.MaxSequence(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("load current max commit sequence: %w", err)
+			}
+		}
+		assignBatchSequences(toIndex, baseSequence)
 
 		useWorktrees := len(toIndex) > 1
 		histOpts := history.IndexOptions{
@@ -203,6 +209,14 @@ func discoverDocs(paths []string) ([]string, error) {
 		}
 	}
 	return result, nil
+}
+
+func assignBatchSequences(commits []gitutil.Commit, baseSequence int) {
+	for i := range commits {
+		// git log returns newest-first. Assign the newest commit in this batch the
+		// highest sequence while preserving monotonic growth across incremental runs.
+		commits[i].Sequence = baseSequence + len(commits) - i
+	}
 }
 
 // indexDoc reads a markdown file, renders it to resolve snippets, and stores both.

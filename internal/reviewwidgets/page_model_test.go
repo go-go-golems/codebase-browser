@@ -33,7 +33,7 @@ Outro prose.
 	if widget.Type != "widget" || widget.Directive != "codebase-diff-stats" {
 		t.Fatalf("widget block = %#v", widget)
 	}
-	if widget.ID != "widget-1" || widget.Props["from"] != "HEAD~1" || widget.Props["to"] != "HEAD" {
+	if widget.ID != "stub-1" || widget.Props["from"] != "HEAD~1" || widget.Props["to"] != "HEAD" {
 		t.Fatalf("widget props = %#v", widget)
 	}
 	if page.Blocks[2].Type != "markdown" || !strings.Contains(page.Blocks[2].HTML, "Outro prose") {

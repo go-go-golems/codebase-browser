@@ -122,14 +122,15 @@ func preprocess(src []byte, loaded *browser.Loaded, sourceFS fs.FS) ([]byte, []S
 		if j <= len(lines) {
 			body = lines[i+1 : j]
 		}
+		stubCounter++
+		stubID := "stub-" + strconv.Itoa(stubCounter)
 		ref, err := resolveDirective(info, body, loaded, sourceFS)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("line %d: %s", i+1, err))
 			// Emit a visible marker so authors see the error in the rendered page.
 			out = append(out, fmt.Sprintf("> **doc error**: %s (`%s`)", err, info))
 		} else {
-			stubCounter++
-			ref.StubID = "stub-" + strconv.Itoa(stubCounter)
+			ref.StubID = stubID
 			snippets = append(snippets, *ref)
 			// Review/static pages now render widgets from the structured page model
 			// and SnippetRef rows, not from hidden HTML stubs. Keep the legacy HTML

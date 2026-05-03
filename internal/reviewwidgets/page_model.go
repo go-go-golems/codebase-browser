@@ -117,7 +117,7 @@ func buildWidgetBlock(id, line int, info string, bodyLines []string) (*Block, []
 	}
 	return &Block{
 		Type:      "widget",
-		ID:        "widget-" + strconv.Itoa(id),
+		ID:        "stub-" + strconv.Itoa(id),
 		Directive: directive,
 		Props:     props,
 		Body:      body,

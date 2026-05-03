@@ -39,13 +39,12 @@ export function ReviewDocPage() {
 }
 
 function ReviewBlocks({ page }: { page: DocPage }) {
-  let widgetIndex = 0;
+  const snippetsByID = new Map<string, SnippetRef>((page.snippets ?? []).map((snippet) => [snippet.stubId, snippet]));
   return (
     <>
       {(page.blocks ?? []).map((block, index) => {
         if (block.type === 'widget') {
-          const snippet = page.snippets?.[widgetIndex];
-          widgetIndex += 1;
+          const snippet = block.id ? snippetsByID.get(block.id) : undefined;
           return <ReviewWidgetBlock key={block.id ?? index} block={block} snippet={snippet} />;
         }
         return <MarkdownBlock key={block.id ?? index} block={block} />;

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/wesen/codebase-browser/internal/gitutil"
@@ -239,8 +240,8 @@ INSERT OR IGNORE INTO commit_symbols(commit_id, symbol_id) VALUES (?, ?)`)
 	return result, nil
 }
 
-// loadRefs groups refs by (from, to, kind, file), stores one ref_version per group
-// with locations_json, and maps it to the commit.
+// loadRefs groups refs by (from, to, kind, file), stores one ref_version per
+// distinct locations_json value, and maps it to the commit.
 func loadRefs(ctx context.Context, tx *sql.Tx, commitID int64, refs []indexer.Ref, symbolIDMap map[string]int64, fileIDMap map[string]int64) error {
 	// Group refs by (from, to, kind, file).
 	type refKey struct {
@@ -278,7 +279,7 @@ func loadRefs(ctx context.Context, tx *sql.Tx, commitID int64, refs []indexer.Re
 	refStmt, err := tx.PrepareContext(ctx, `
 INSERT INTO ref_versions(from_symbol_id, to_stable_id, kind, file_id, locations_json)
 VALUES (?, ?, ?, ?, ?)
-ON CONFLICT(from_symbol_id, to_stable_id, kind, file_id) DO NOTHING
+ON CONFLICT(from_symbol_id, to_stable_id, kind, file_id, locations_json) DO NOTHING
 RETURNING id`)
 	if err != nil {
 		return fmt.Errorf("prepare ref insert: %w", err)
@@ -287,7 +288,7 @@ RETURNING id`)
 
 	lookupStmt, err := tx.PrepareContext(ctx, `
 SELECT id FROM ref_versions
-WHERE from_symbol_id = ? AND to_stable_id = ? AND kind = ? AND file_id = ?`)
+WHERE from_symbol_id = ? AND to_stable_id = ? AND kind = ? AND file_id = ? AND locations_json = ?`)
 	if err != nil {
 		return fmt.Errorf("prepare ref lookup: %w", err)
 	}
@@ -301,10 +302,23 @@ INSERT OR IGNORE INTO commit_refs(commit_id, ref_version_id) VALUES (?, ?)`)
 	defer mapStmt.Close()
 
 	for key, locs := range groups {
+		sort.Slice(locs, func(i, j int) bool {
+			if locs[i].StartOffset != locs[j].StartOffset {
+				return locs[i].StartOffset < locs[j].StartOffset
+			}
+			if locs[i].EndOffset != locs[j].EndOffset {
+				return locs[i].EndOffset < locs[j].EndOffset
+			}
+			if locs[i].StartLine != locs[j].StartLine {
+				return locs[i].StartLine < locs[j].StartLine
+			}
+			return locs[i].StartCol < locs[j].StartCol
+		})
 		locsJSON, _ := json.Marshal(locs)
+		locsJSONString := string(locsJSON)
 		refID, err := insertOrLookupID(ctx, refStmt, lookupStmt,
-			[]any{key.fromSymID, key.toStable, key.kind, key.fileID, string(locsJSON)},
-			[]any{key.fromSymID, key.toStable, key.kind, key.fileID},
+			[]any{key.fromSymID, key.toStable, key.kind, key.fileID, locsJSONString},
+			[]any{key.fromSymID, key.toStable, key.kind, key.fileID, locsJSONString},
 		)
 		if err != nil {
 			return fmt.Errorf("insert/lookup ref (%d→%s %s): %w", key.fromSymID, key.toStable, key.kind, err)

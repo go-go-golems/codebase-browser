@@ -88,6 +88,18 @@ func (s *Store) HasCommit(ctx context.Context, hash string) (bool, error) {
 	return count > 0, nil
 }
 
+// MaxSequence returns the highest explicit commit sequence currently stored.
+func (s *Store) MaxSequence(ctx context.Context) (int, error) {
+	var max sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(sequence) FROM commits WHERE error = ''`).Scan(&max); err != nil {
+		return 0, err
+	}
+	if !max.Valid {
+		return 0, nil
+	}
+	return int(max.Int64), nil
+}
+
 // GetCommit retrieves a single commit by hash.
 func (s *Store) GetCommit(ctx context.Context, hash string) (*CommitRow, error) {
 	row := &CommitRow{}

@@ -132,6 +132,14 @@ func TestIndexReviewDocsOnlyIndexesMultipleDocsAndCountsSnippets(t *testing.T) {
 	}
 }
 
+func TestAssignBatchSequencesAppendsAboveExistingMax(t *testing.T) {
+	commits := []gitutil.Commit{{ShortHash: "newest"}, {ShortHash: "oldest"}}
+	assignBatchSequences(commits, 7)
+	if commits[0].Sequence != 9 || commits[1].Sequence != 8 {
+		t.Fatalf("sequences = [%d, %d], want [9, 8]", commits[0].Sequence, commits[1].Sequence)
+	}
+}
+
 func TestHasCommits(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()

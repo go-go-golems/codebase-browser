@@ -98,8 +98,10 @@ CREATE INDEX idx_symbols_name ON symbols(name);
 CREATE INDEX idx_symbols_kind ON symbols(kind);
 CREATE INDEX idx_symbols_body ON symbols(body_hash);
 
--- Ref versions: one row per unique (from_symbol, to_stable_id, kind, file) combo.
--- Multiple locations for the same combo are stored as a JSON array.
+-- Ref versions: one row per unique (from_symbol, to_stable_id, kind, file,
+-- locations_json) combo. Multiple locations for the same combo are stored as a
+-- JSON array; the array is part of the identity so moved call sites get a new
+-- version instead of reusing stale ranges.
 CREATE TABLE ref_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_symbol_id INTEGER NOT NULL REFERENCES symbols(id),
@@ -107,7 +109,7 @@ CREATE TABLE ref_versions (
     kind TEXT NOT NULL,
     file_id INTEGER NOT NULL REFERENCES files(id),
     locations_json TEXT NOT NULL DEFAULT '[]',
-    UNIQUE(from_symbol_id, to_stable_id, kind, file_id)
+    UNIQUE(from_symbol_id, to_stable_id, kind, file_id, locations_json)
 );
 CREATE INDEX idx_ref_from ON ref_versions(from_symbol_id);
 CREATE INDEX idx_ref_to ON ref_versions(to_stable_id);
