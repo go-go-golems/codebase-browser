@@ -76,7 +76,7 @@ export function DocPage() {
           ))}
         </div>
       )}
-      <div dangerouslySetInnerHTML={{ __html: data.html }} />
+      <div dangerouslySetInnerHTML={{ __html: data.html ?? '' }} />
       {stubs.map((s, i) =>
         createPortal(
           <DocSnippet

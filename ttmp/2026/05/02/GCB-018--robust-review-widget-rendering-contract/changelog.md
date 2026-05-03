@@ -56,3 +56,14 @@ Implemented Phase 4 structured export: static_review_pages is created and popula
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/export_test.go — Asserts structured review page export
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/reviewdocs.go — Writes static_review_pages alongside temporary legacy rendered docs
 
+
+## 2026-05-02
+
+Cut static review pages over to structured blocks: frontend reads static_review_pages, ReviewDocPage renders blocks directly, static_review_rendered_docs was removed, and smoke validation confirms no review-page legacy stubs.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/staticapp/reviewdocs.go — Removed static_review_rendered_docs write path
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/api/sqlJsQueryProvider.ts — Loads review pages from static_review_pages and snippets from review_doc_snippets
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — Direct structured block renderer with no DOM scanning/portals
+

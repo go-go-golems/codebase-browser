@@ -72,7 +72,8 @@ echo "[smoke] strict export"
 )
 
 echo "[smoke] SQLite validation"
-test "$(sqlite3 "$OUT/db/codebase.db" "SELECT COUNT(*) FROM static_review_rendered_docs WHERE json_array_length(errors_json)>0;")" = "0"
+test "$(sqlite3 "$OUT/db/codebase.db" "SELECT COUNT(*) FROM static_review_pages WHERE json_array_length(diagnostics_json)>0;")" = "0"
+test "$(sqlite3 "$OUT/db/codebase.db" "SELECT COUNT(*) FROM static_review_pages WHERE json_array_length(blocks_json)>0;")" -ge "1"
 test "$(sqlite3 "$OUT/db/codebase.db" "SELECT COUNT(*) FROM review_doc_snippets;")" -ge "11"
 
 echo "[smoke] serving $OUT on http://127.0.0.1:$PORT"

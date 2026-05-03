@@ -1,4 +1,4 @@
-import type { DocPage, ReviewDocMeta, SnippetRef } from './docApi';
+import type { DocPage, ReviewDiagnostic, ReviewDocMeta, ReviewPageBlock, SnippetRef } from './docApi';
 import type { FileXrefResponse, FileXrefUseTarget, SnippetRefView, SourceRefView } from './sourceApi';
 import type { File, IndexSummary, Package, PackageLite, Symbol } from './types';
 import type { RefRecord, XrefResponse, XrefUseTarget } from './xrefApi';
@@ -99,12 +99,25 @@ type SymbolMetaSQL = SqlRow & {
 
 type ReviewDocMetaSQL = SqlRow & ReviewDocMeta;
 
-type ReviewDocSQL = SqlRow & {
+type ReviewPageSQL = SqlRow & {
   slug: string;
   title: string;
-  html: string;
-  snippetsJson: string;
-  errorsJson: string;
+  blocksJson: string;
+  diagnosticsJson: string;
+};
+
+type ReviewSnippetSQL = SqlRow & {
+  stubId: string;
+  directive: string;
+  symbolId: string | null;
+  filePath: string | null;
+  kind: string | null;
+  language: string | null;
+  text: string;
+  paramsJson: string;
+  startLine: number;
+  endLine: number;
+  commitHash: string | null;
 };
 
 type PackageSQL = SqlRow & {
@@ -513,29 +526,48 @@ export class SqlJsQueryProvider {
     const db = await this.getDb();
     return queryAll<ReviewDocMetaSQL>(db, `
       SELECT slug, title
-      FROM static_review_rendered_docs
+      FROM static_review_pages
       ORDER BY slug
     `).map((row) => ({ slug: row.slug, title: row.title }));
   }
 
   async getReviewDoc(slug: string): Promise<DocPage> {
     const db = await this.getDb();
-    const row = queryOne<ReviewDocSQL>(db, `
+    const row = queryOne<ReviewPageSQL>(db, `
       SELECT slug,
              title,
-             html,
-             snippets_json AS snippetsJson,
-             errors_json AS errorsJson
-      FROM static_review_rendered_docs
+             blocks_json AS blocksJson,
+             diagnostics_json AS diagnosticsJson
+      FROM static_review_pages
       WHERE slug = ?
     `, [slug]);
     if (!row) throw new QueryError('NOT_FOUND', `review doc not found: ${slug}`);
+    const snippets = queryAll<ReviewSnippetSQL>(db, `
+      SELECT s.stub_id AS stubId,
+             s.directive,
+             s.symbol_id AS symbolId,
+             s.file_path AS filePath,
+             s.kind,
+             s.language,
+             s.text,
+             s.params_json AS paramsJson,
+             s.start_line AS startLine,
+             s.end_line AS endLine,
+             s.commit_hash AS commitHash
+      FROM review_docs d
+      JOIN review_doc_snippets s ON s.doc_id = d.id
+      WHERE d.slug = ?
+      ORDER BY s.id
+    `, [slug]).map(toSnippetRef);
+    const diagnostics = parseJSON<ReviewDiagnostic[]>(row.diagnosticsJson, []);
     return {
       slug: row.slug,
       title: row.title,
-      html: row.html,
-      snippets: parseJSON<SnippetRef[]>(row.snippetsJson, []),
-      errors: parseJSON<string[]>(row.errorsJson, []),
+      html: '',
+      blocks: parseJSON<ReviewPageBlock[]>(row.blocksJson, []),
+      snippets,
+      diagnostics,
+      errors: diagnostics.map((diagnostic) => diagnostic.message),
     };
   }
 
@@ -767,6 +799,22 @@ const refRecordSelectSQLWithAlias = `
          r.end_offset AS endOffset
   FROM snapshot_refs r
 `;
+
+function toSnippetRef(row: ReviewSnippetSQL): SnippetRef {
+  return {
+    stubId: row.stubId,
+    directive: row.directive,
+    symbolId: row.symbolId ?? undefined,
+    filePath: row.filePath ?? undefined,
+    kind: row.kind ?? undefined,
+    language: row.language ?? undefined,
+    text: row.text,
+    params: parseJSON<Record<string, string>>(row.paramsJson, {}),
+    startLine: row.startLine,
+    endLine: row.endLine,
+    commitHash: row.commitHash ?? undefined,
+  };
+}
 
 function toRefRecord(row: RefRecordSQL): RefRecord {
   return {

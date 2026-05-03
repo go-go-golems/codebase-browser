@@ -125,3 +125,44 @@ This phase introduces the future structured representation without switching the
 ### Notes
 
 This is an intermediate bridge phase. Deprecated `static_review_rendered_docs` and DOM hydration are still present only because the frontend has not switched to `static_review_pages` yet. The next phase should update the sql.js provider and React page renderer to consume `blocks_json`; after that, the legacy rendered-doc table and stub path can be deleted.
+
+## Step 6: Phase 5 structured review-page frontend and old static table removal
+
+### What changed
+
+- Switched the static browser API from `static_review_rendered_docs` to `static_review_pages`:
+  - `listReviewDocs()` now reads `static_review_pages`.
+  - `getReviewDoc()` now reads `blocks_json` and `diagnostics_json`.
+  - Review snippets are loaded from `review_docs` + `review_doc_snippets` and matched to widget blocks by directive order.
+- Rewrote `ui/src/features/review/ReviewDocPage.tsx` to render structured blocks directly:
+  - Markdown blocks render their pre-rendered HTML.
+  - Widget blocks render `DocSnippet` directly.
+  - No `querySelectorAll('[data-codebase-snippet]')`.
+  - No `createPortal`.
+  - No mutation of `innerHTML` to clear fallback stubs.
+- Removed the old `static_review_rendered_docs` creation/write path from `internal/staticapp/reviewdocs.go`.
+- Updated the review-widget smoke script to validate `static_review_pages` diagnostics/blocks instead of the removed table.
+- Updated the Playwright smoke script to fail if review pages contain any legacy `data-codebase-snippet` stubs.
+- Kept the non-review `/doc` page legacy hydration path for now; it is outside the static review page path and should be removed after docs pages are migrated to structured blocks too.
+
+### Validation
+
+- `pnpm -C ui run typecheck` passed.
+- `GOWORK=off go test ./...` passed.
+- `GOWORK=off make build` passed and rebuilt the embedded SPA assets.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed with the new structured DB table.
+- Manual Playwright harness validation of the rebuilt structured smoke export passed:
+  - no `doc error`
+  - no `Failed`
+  - no `Unknown`
+  - no `not found`
+  - no `outside this export`
+  - no `Loading…`
+  - no `&#34;`
+  - no paragraph tags inside the `codebase-file` widget
+  - no legacy `data-codebase-snippet` stubs on the review page
+  - all six commit-walk steps rendered cleanly
+
+### Notes
+
+This is the main GCB-018 cutover for static review pages. Review pages now use an explicit SQLite JSON block model rather than hidden raw-HTML stubs. The remaining deprecated stub code is limited to the older generic docs page path and to `docs.Render`, which still supplies strict symbol/file validation and review snippet indexing until that resolver is split from HTML rendering.

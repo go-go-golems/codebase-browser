@@ -25,13 +25,19 @@ try {
     throw new Error('page contains escaped quote artifact &#34;');
   }
 
-  const stepButtons = await page.locator('[data-role="commit-walk"] button').filter({ hasText: /^[0-9]+$/ }).count();
-  for (let i = 1; i <= stepButtons; i++) {
-    await page.getByRole('button', { name: String(i) }).click();
+  const legacyStubs = await page.locator('[data-codebase-snippet]').count();
+  if (legacyStubs !== 0) {
+    throw new Error(`page still contains ${legacyStubs} legacy data-codebase-snippet stub(s)`);
+  }
+
+  const stepButtons = page.locator('[data-role="commit-walk"] ol button');
+  const stepButtonCount = await stepButtons.count();
+  for (let i = 0; i < stepButtonCount; i++) {
+    await stepButtons.nth(i).click();
     await page.waitForTimeout(300);
     const text = await page.locator('main').innerText();
     if (forbidden.test(text)) {
-      throw new Error(`visible widget failure on commit-walk step ${i}:\n${text}`);
+      throw new Error(`visible widget failure on commit-walk step ${i + 1}:\n${text}`);
     }
   }
 

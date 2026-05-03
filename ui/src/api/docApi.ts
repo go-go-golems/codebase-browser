@@ -10,17 +10,37 @@ export interface SnippetRef {
   kind?: string;
   language?: string;
   text: string;
+  commitHash?: string;
   params?: Record<string, string>;
   startLine?: number;
   endLine?: number;
 }
 
+export interface ReviewDiagnostic {
+  severity: string;
+  line?: number;
+  directive?: string;
+  message: string;
+}
+
+export interface ReviewPageBlock {
+  type: 'markdown' | 'widget';
+  id?: string;
+  html?: string;
+  directive?: string;
+  props?: Record<string, string>;
+  body?: string;
+  line?: number;
+}
+
 export interface DocPage {
   slug: string;
   title: string;
-  html: string;
+  html?: string;
   snippets: SnippetRef[];
   errors?: string[];
+  blocks?: ReviewPageBlock[];
+  diagnostics?: ReviewDiagnostic[];
 }
 
 export interface PageMeta {

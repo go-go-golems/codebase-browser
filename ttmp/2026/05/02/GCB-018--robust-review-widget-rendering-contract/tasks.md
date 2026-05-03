@@ -16,7 +16,7 @@
 - [x] Phase 2: Add `internal/reviewwidgets` registry/schema/parser/validator package.
 - [x] Phase 3: Implement `BuildPage` structured review page model with markdown and widget blocks.
 - [x] Phase 4: Add `static_review_pages` table and export structured page data.
-- [ ] Phase 5: Update sql.js provider and React review page to render structured blocks directly.
-- [ ] Phase 6: Delete DOM scanning, stub HTML, and old `static_review_rendered_docs` path.
+- [x] Phase 5: Update sql.js provider and React review page to render structured blocks directly.
+- [ ] Phase 6: Delete remaining legacy doc-page stub HTML path after non-review docs are migrated; review-page DOM scanning and `static_review_rendered_docs` are already removed.
 - [ ] Phase 7: Make strict docs validation cover every directive and commit-walk child step.
 - [ ] Phase 8: Wire CI/docs-smoke to run strict export plus Playwright review-widget validation.
