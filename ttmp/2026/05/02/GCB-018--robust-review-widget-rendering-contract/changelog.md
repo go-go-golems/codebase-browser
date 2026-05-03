@@ -26,3 +26,13 @@ Implemented Phase 1 smoke coverage: added all-widget fixture, strict export smok
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/examples/all-widgets-smoke.md — All-widget strict review fixture
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ttmp/2026/05/02/GCB-018--robust-review-widget-rendering-contract/scripts/01-review-widget-smoke.sh — Strict index/export smoke runner
 
+
+## 2026-05-02
+
+Implemented Phase 2 registry foundation: added internal/reviewwidgets directive/step schema, central param validation, tests, and renderer integration.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/docs/renderer.go — Now validates directives and commit-walk steps via reviewwidgets
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/reviewwidgets/schema.go — Central directive and commit-walk step contract
+

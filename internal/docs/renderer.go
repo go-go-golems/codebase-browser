@@ -27,6 +27,7 @@ import (
 
 	"github.com/wesen/codebase-browser/internal/browser"
 	"github.com/wesen/codebase-browser/internal/indexer"
+	"github.com/wesen/codebase-browser/internal/reviewwidgets"
 )
 
 // SnippetRef is one resolved snippet embedding inside a doc page.
@@ -195,6 +196,9 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 		if len(kv) == 2 {
 			params[kv[0]] = kv[1]
 		}
+	}
+	if err := reviewwidgets.ValidateParams(directive, params); err != nil {
+		return nil, err
 	}
 	ref := &SnippetRef{Directive: directive}
 	// Capture commit= param for history-aware resolution (GCB-010 Slice 0).
@@ -451,10 +455,10 @@ func parseCommitWalkSteps(lines []string, loaded *browser.Loaded) ([]commitWalkS
 				params[kv[0]] = kv[1]
 			}
 		}
-		kind := params["kind"]
-		if kind == "" {
-			return nil, fmt.Errorf("commit walk line %d: missing kind=", i+1)
+		if err := reviewwidgets.ValidateStepParams(params); err != nil {
+			return nil, fmt.Errorf("commit walk line %d: %w", i+1, err)
 		}
+		kind := params["kind"]
 		step := commitWalkStep{
 			Kind:   kind,
 			Title:  params["title"],

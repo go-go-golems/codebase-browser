@@ -45,3 +45,28 @@ The design document in `design/01-review-widget-rendering-contract-analysis-and-
 ### Notes
 
 This is Phase 1 of the GCB-018 plan: it freezes expected visible behavior before the deeper clean-cut refactor. Deprecated DOM-scanning/stub code is not removed in this phase; the design intentionally removes it in Phase 6 after the structured page model is implemented.
+
+## Step 3: Phase 2 directive registry foundation
+
+### What changed
+
+- Added `internal/reviewwidgets`, a dependency-free package that defines the supported top-level `codebase-*` directives and supported `codebase-commit-walk` step kinds.
+- Added metadata for each directive:
+  - required params
+  - optional params
+  - commit-ref params
+  - whether the directive requires a symbol or file
+  - short description
+- Added `ValidateParams` and `ValidateStepParams` so renderers and tests no longer need private copies of the directive contract.
+- Wired `internal/docs/renderer.go` through the registry before directive-specific rendering. Unknown directives, missing required params, and unsupported params now fail centrally.
+- Wired commit-walk step parsing through the registry. Unknown step kinds and unsupported step params now fail before React sees them.
+- Added unit tests in `internal/reviewwidgets/schema_test.go` for directive enumeration, required params, unsupported params, unknown directives, and commit-walk step validation.
+
+### Validation
+
+- `GOWORK=off go test ./internal/reviewwidgets ./internal/docs ./internal/review` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed after the renderer started using the registry.
+
+### Notes
+
+This is the first real removal of duplicated/deprecated contract logic: directive/step required-param checks are no longer scattered only inside `internal/docs/renderer.go`. The old HTML stub/DOM hydration path still exists and will be removed after the structured review page model is implemented.
