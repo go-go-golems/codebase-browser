@@ -95,6 +95,10 @@ topics:
       description: Review markdown documents and rendered review guides
     - slug: static-export
       description: Standalone static export bundles and static runtime behavior
+    - slug: frontend
+      description: Frontend browser application code, UI runtime behavior, and client-side data fetching.
+    - slug: sqljs
+      description: sql.js SQLite WebAssembly runtime used by static browser exports.
 docTypes:
     - slug: index
       description: Ticket index document
