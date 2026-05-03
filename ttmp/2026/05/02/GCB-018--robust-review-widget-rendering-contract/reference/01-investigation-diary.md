@@ -185,3 +185,27 @@ This is the main GCB-018 cutover for static review pages. Review pages now use a
 ### Notes
 
 This completes the strict-validation parity part of GCB-018 for commit refs: when a future directive or commit-walk step adds a commit-ref parameter, strict validation is updated by changing the central registry, not by hunting through `strict_docs.go`.
+
+## Step 8: Phase 6 remove remaining frontend stub hydration code
+
+### What changed
+
+- Removed the generic `/doc` page's deprecated DOM hydration implementation.
+- Removed frontend imports/uses of `createPortal`, `querySelectorAll('[data-codebase-snippet]')`, `useGetDocQuery`, and `useListDocsQuery` from the active source tree.
+- Removed the sidebar's empty generic `Docs` section; review docs are the supported static documentation surface.
+- Changed `internal/docs.Render` so resolved directives no longer emit raw HTML stubs or source-code fallback HTML.
+  - It still returns `SnippetRef` rows for review indexing and strict validation.
+  - Rendered HTML now contains only an inert resolution marker for directive fences.
+- Updated `internal/docs/renderer_test.go` to assert the deprecated hydration attributes are absent while snippet metadata is preserved.
+- Updated `DocSnippet` comments to describe structured review widget rendering rather than stub hydration.
+
+### Validation
+
+- `GOWORK=off go test ./internal/docs ./internal/review ./internal/staticapp ./internal/reviewwidgets` passed.
+- `pnpm -C ui run typecheck` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+- Active source search confirms no implementation use of the deprecated review/static export table or DOM-scanned hydration path remains.
+
+### Notes
+
+This completes the cleanup the user explicitly asked for: the deprecated review/static-export widget contract is not just bypassed, it has been removed from the active frontend and static export path. `docs.Render` remains as the directive resolver/snippet extractor for indexing, but it no longer produces widget mount stubs.

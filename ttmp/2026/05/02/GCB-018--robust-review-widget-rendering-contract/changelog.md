@@ -76,3 +76,14 @@ Strict docs commit-ref validation now uses the central reviewwidgets registry fo
 
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/strict_docs.go — Commit ref extraction now driven by reviewwidgets registry metadata
 
+
+## 2026-05-02
+
+Removed remaining active stub hydration code: generic doc page now no longer scans/hydrates stubs, docs.Render no longer emits widget mount HTML, and tests assert hydration attributes are absent.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/docs/renderer.go — No longer emits data-codebase-snippet stubs
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/app/App.tsx — Removed empty generic Docs sidebar section
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/doc/DocPage.tsx — Deprecated DOM hydration implementation removed
+

@@ -62,10 +62,10 @@ function useGetSnippetFromCommit(
 }
 
 /**
- * DocSnippet hydrates one `[data-codebase-snippet]` stub on a doc page.
- * The server-rendered stub carries the symbol id + directive type; we
- * dispatch to the right widget so every directive on a doc page gets
- * the same interactive treatment a /symbol/{id} page does:
+ * DocSnippet renders one structured review widget block. The backend resolves
+ * directive metadata and snippets into SQLite rows; the review page then
+ * dispatches to the right widget so every directive gets the same interactive
+ * treatment a /symbol/{id} page does:
  *
  *   - codebase-snippet    → <LinkedCode> with clickable xrefs
  *   - codebase-signature  → compact <Link> to the symbol

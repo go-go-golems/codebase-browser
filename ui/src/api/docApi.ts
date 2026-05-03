@@ -43,12 +43,6 @@ export interface DocPage {
   diagnostics?: ReviewDiagnostic[];
 }
 
-export interface PageMeta {
-  slug: string;
-  title: string;
-  path: string;
-}
-
 export interface ReviewDocMeta {
   slug: string;
   title: string;
@@ -69,12 +63,6 @@ export const docApi = createApi({
   baseQuery: noopBaseQuery,
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
-    listDocs: b.query<PageMeta[], void>({
-      queryFn: async () => ({ data: [] }),
-    }),
-    getDoc: b.query<DocPage, string>({
-      queryFn: (slug) => providerResult(() => getSqlJsProvider().getReviewDoc(slug)),
-    }),
     listReviewDocs: b.query<ReviewDocMeta[], void>({
       queryFn: () => providerResult(() => getSqlJsProvider().listReviewDocs()),
     }),
@@ -84,4 +72,4 @@ export const docApi = createApi({
   }),
 });
 
-export const { useListDocsQuery, useGetDocQuery, useListReviewDocsQuery, useGetReviewDocQuery } = docApi;
+export const { useListReviewDocsQuery, useGetReviewDocQuery } = docApi;

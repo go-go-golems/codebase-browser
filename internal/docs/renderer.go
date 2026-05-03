@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	htmlpkg "html"
 	"io/fs"
 	"regexp"
 	"strconv"
@@ -132,12 +131,12 @@ func preprocess(src []byte, loaded *browser.Loaded, sourceFS fs.FS) ([]byte, []S
 			stubCounter++
 			ref.StubID = "stub-" + strconv.Itoa(stubCounter)
 			snippets = append(snippets, *ref)
-			// Emit the stub as a raw-HTML block (blank line above + below so
-			// goldmark treats it as a standalone HTML block rather than
-			// inline HTML — this preserves the stub's attributes verbatim
-			// through markdown rendering).
+			// Review/static pages now render widgets from the structured page model
+			// and SnippetRef rows, not from hidden HTML stubs. Keep the legacy HTML
+			// output deliberately inert so Markdown rendering cannot corrupt source
+			// text and React never has to scan for data-codebase-snippet markers.
 			out = append(out, "")
-			out = append(out, stubHTML(ref))
+			out = append(out, fmt.Sprintf("> Resolved `%s` directive.", ref.Directive))
 			out = append(out, "")
 		}
 		if j < len(lines) {
@@ -147,44 +146,6 @@ func preprocess(src []byte, loaded *browser.Loaded, sourceFS fs.FS) ([]byte, []S
 		}
 	}
 	return []byte(strings.Join(out, "\n")), snippets, errs
-}
-
-// stubHTML renders a SnippetRef as a single self-contained <div> that the
-// React frontend can hydrate. The stub's inner body is the pre-resolved
-// plaintext fallback so JS-disabled readers still see something useful.
-func stubHTML(ref *SnippetRef) string {
-	var body string
-	switch ref.Directive {
-	case "codebase-signature":
-		body = "<pre><code>" + htmlpkg.EscapeString(ref.Text) + "</code></pre>"
-	case "codebase-doc":
-		body = "<blockquote>" + htmlpkg.EscapeString(ref.Text) + "</blockquote>"
-	default: // codebase-snippet, codebase-file
-		lang := ref.Language
-		if lang == "" {
-			lang = "text"
-		}
-		body = `<pre><code class="language-` + lang + `">` +
-			htmlpkg.EscapeString(ref.Text) + "</code></pre>"
-	}
-	commitAttr := ""
-	if ref.CommitHash != "" {
-		commitAttr = fmt.Sprintf(` data-commit=%q`, ref.CommitHash)
-	}
-	paramsAttr := ""
-	if len(ref.Params) > 0 {
-		paramsJSON, _ := json.Marshal(ref.Params)
-		// HTML attributes cannot safely contain raw JSON quotes escaped with
-		// backslashes: the browser still treats the quote as the end of the
-		// attribute. Escape as HTML instead so getAttribute returns valid JSON.
-		paramsAttr = ` data-params="` + htmlpkg.EscapeString(string(paramsJSON)) + `"`
-	}
-	return fmt.Sprintf(
-		`<div class="codebase-snippet" data-codebase-snippet `+
-			`data-stub-id=%q data-sym=%q data-directive=%q `+
-			`data-kind=%q data-lang=%q%s%s>%s</div>`,
-		ref.StubID, ref.SymbolID, ref.Directive, ref.Kind, ref.Language, commitAttr, paramsAttr, body,
-	)
 }
 
 func resolveDirective(info string, body []string, loaded *browser.Loaded, sourceFS fs.FS) (*SnippetRef, error) {
