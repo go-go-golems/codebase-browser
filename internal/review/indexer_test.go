@@ -140,6 +140,38 @@ func TestAssignBatchSequencesAppendsAboveExistingMax(t *testing.T) {
 	}
 }
 
+func TestInferBatchBaseSequenceFromExistingCommitInRange(t *testing.T) {
+	ctx := context.Background()
+	store, err := Create(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	defer store.Close()
+
+	loadTestSnapshotWithCommit(t, ctx, store, t.TempDir(), gitutil.Commit{
+		Hash:       "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		ShortHash:  "bbbbbbb",
+		AuthorTime: time.Now(),
+		Sequence:   42,
+	})
+	commits := []gitutil.Commit{
+		{Hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ShortHash: "aaaaaaa"},
+		{Hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ShortHash: "bbbbbbb"},
+		{Hash: "cccccccccccccccccccccccccccccccccccccccc", ShortHash: "ccccccc"},
+	}
+	base, err := inferBatchBaseSequence(ctx, store, commits)
+	if err != nil {
+		t.Fatalf("infer base: %v", err)
+	}
+	if base != 40 {
+		t.Fatalf("base = %d, want 40", base)
+	}
+	assignBatchSequences(commits, base)
+	if commits[0].Sequence != 43 || commits[1].Sequence != 42 || commits[2].Sequence != 41 {
+		t.Fatalf("sequences = [%d, %d, %d], want [43, 42, 41]", commits[0].Sequence, commits[1].Sequence, commits[2].Sequence)
+	}
+}
+
 func TestHasCommits(t *testing.T) {
 	ctx := context.Background()
 	tmpDir := t.TempDir()
@@ -186,20 +218,24 @@ func setupDocIndexTest(t *testing.T, ctx context.Context) (*Store, string, *brow
 
 func loadTestSnapshot(t *testing.T, ctx context.Context, store *Store, sourceRoot string) {
 	t.Helper()
-	fileContent := "package test\n\nfunc Target() {\n\tprintln(\"hello\")\n}\n"
-	if err := os.WriteFile(filepath.Join(sourceRoot, "target.go"), []byte(fileContent), 0o644); err != nil {
-		t.Fatalf("write source: %v", err)
-	}
-	start := strings.Index(fileContent, "func Target")
-	end := len(fileContent)
-	commit := gitutil.Commit{
+	loadTestSnapshotWithCommit(t, ctx, store, sourceRoot, gitutil.Commit{
 		Hash:        "abc123def456",
 		ShortHash:   "abc123",
 		Message:     "test commit",
 		AuthorName:  "Test",
 		AuthorEmail: "test@example.com",
 		AuthorTime:  time.Now(),
+	})
+}
+
+func loadTestSnapshotWithCommit(t *testing.T, ctx context.Context, store *Store, sourceRoot string, commit gitutil.Commit) {
+	t.Helper()
+	fileContent := "package test\n\nfunc Target() {\n\tprintln(\"hello\")\n}\n"
+	if err := os.WriteFile(filepath.Join(sourceRoot, "target.go"), []byte(fileContent), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
 	}
+	start := strings.Index(fileContent, "func Target")
+	end := len(fileContent)
 	hash := sha256.Sum256([]byte(fileContent))
 	sha := hex.EncodeToString(hash[:])
 

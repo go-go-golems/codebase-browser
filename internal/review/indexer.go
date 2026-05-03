@@ -74,7 +74,16 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 		// extractor is filesystem-oriented, so use git worktrees automatically for
 		// commit ranges and keep direct indexing only for single-commit snapshots.
 
-		// Filter out already-indexed commits when running in incremental mode.
+		if opts.Incremental {
+			if err := assignIncrementalSequences(ctx, store, commits); err != nil {
+				return nil, err
+			}
+		} else {
+			assignBatchSequences(commits, 0)
+		}
+
+		// Filter out already-indexed commits when running in incremental mode after
+		// assigning sequences, so retry batches keep the original per-range IDs.
 		toIndex := commits
 		skipped := 0
 		if opts.Incremental {
@@ -98,16 +107,6 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 		} else if skipped > 0 {
 			fmt.Fprintf(os.Stderr, "Indexing %d new commits (skipping %d existing)\n", len(toIndex), skipped)
 		}
-
-		baseSequence := 0
-		if opts.Incremental {
-			var err error
-			baseSequence, err = store.History.MaxSequence(ctx)
-			if err != nil {
-				return nil, fmt.Errorf("load current max commit sequence: %w", err)
-			}
-		}
-		assignBatchSequences(toIndex, baseSequence)
 
 		useWorktrees := len(toIndex) > 1
 		histOpts := history.IndexOptions{
@@ -211,10 +210,37 @@ func discoverDocs(paths []string) ([]string, error) {
 	return result, nil
 }
 
+func assignIncrementalSequences(ctx context.Context, store *Store, commits []gitutil.Commit) error {
+	baseSequence, err := inferBatchBaseSequence(ctx, store, commits)
+	if err != nil {
+		return err
+	}
+	assignBatchSequences(commits, baseSequence)
+	return nil
+}
+
+func inferBatchBaseSequence(ctx context.Context, store *Store, commits []gitutil.Commit) (int, error) {
+	for i, commit := range commits {
+		row, err := store.History.GetCommit(ctx, commit.Hash)
+		if err != nil {
+			return 0, fmt.Errorf("load existing commit sequence %s: %w", commit.ShortHash, err)
+		}
+		if row != nil {
+			return row.Sequence - (len(commits) - i), nil
+		}
+	}
+	baseSequence, err := store.History.MaxSequence(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("load current max commit sequence: %w", err)
+	}
+	return baseSequence, nil
+}
+
 func assignBatchSequences(commits []gitutil.Commit, baseSequence int) {
 	for i := range commits {
 		// git log returns newest-first. Assign the newest commit in this batch the
-		// highest sequence while preserving monotonic growth across incremental runs.
+		// highest sequence. Incremental runs either infer the original batch base
+		// from existing commits in the same range or append above the DB max.
 		commits[i].Sequence = baseSequence + len(commits) - i
 	}
 }

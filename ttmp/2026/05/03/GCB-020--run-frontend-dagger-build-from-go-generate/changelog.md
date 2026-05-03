@@ -52,3 +52,13 @@ Addressed CI/PR feedback: checked build-web file close errors, preserved increme
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/indexer.go — incremental sequence assignment now starts above existing max sequence
 - /home/manuel/code/wesen/corporate-headquarters/codebase-browser/ui/src/features/review/ReviewDocPage.tsx — review widgets now match snippets by stable block/snippet ID
 
+
+## 2026-05-03
+
+Full 240-commit incremental indexing demo found a partial-retry sequence edge case; fixed sequence inference from existing commits in the requested range and validated final static export at /tmp/gcb-full-export.
+
+### Related Files
+
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/indexer.go — Incremental sequence assignment now infers original batch base from existing commits in range
+- /home/manuel/code/wesen/corporate-headquarters/codebase-browser/internal/review/indexer_test.go — Added retry/overlap sequence inference test
+

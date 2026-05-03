@@ -103,3 +103,44 @@ So `go generate ./internal/staticapp` now actually runs the Dagger pnpm frontend
 - `GCB_SKIP_BUILD=1 make review-widget-smoke`
 
 All commands passed.
+
+## Step 5: Full 240-commit incremental indexing demo found and fixed retry sequence edge case
+
+### What happened
+
+I indexed the codebase-browser repository in three 80-commit batches to exercise incremental behavior:
+
+1. `HEAD~240..HEAD~160`
+2. `HEAD~160..HEAD~80 --incremental`
+3. `HEAD~80..HEAD --incremental --strict-docs`
+
+During the first attempt, one worktree in step 2 failed because Git still had a stale registered worktree. After `git worktree prune`, retrying the same incremental range correctly skipped 79 existing commits and indexed the one missing commit, but this exposed a sequence edge case: assigning retry batches above `MAX(sequence)` makes a missing older commit look newer than HEAD.
+
+### Fix
+
+- `assignIncrementalSequences` now infers the original batch base sequence from any already-indexed commit in the requested range.
+- If there is no overlap, it still appends above `MAX(sequence)` as before.
+- The code now assigns sequences to the full requested commit range before filtering already-indexed commits, so retrying a partial failed range preserves the original sequence positions.
+- Added `TestInferBatchBaseSequenceFromExistingCommitInRange` to cover this retry case.
+
+### Validation/demo results after fix
+
+Rebuilt `/tmp/codebase-browser-demo` and reran the full demo from scratch:
+
+```bash
+/tmp/codebase-browser-demo review index --db /tmp/gcb-full-incremental.db --commits 'HEAD~240..HEAD~160' --docs examples --patterns './...' --parallelism 8
+/tmp/codebase-browser-demo review index --db /tmp/gcb-full-incremental.db --commits 'HEAD~160..HEAD~80' --docs examples --patterns './...' --parallelism 8 --incremental
+/tmp/codebase-browser-demo review index --db /tmp/gcb-full-incremental.db --commits 'HEAD~80..HEAD' --docs examples --patterns './...' --parallelism 8 --incremental --strict-docs
+/tmp/codebase-browser-demo review index --db /tmp/gcb-full-incremental.db --docs examples --docs-only --strict-docs
+```
+
+Results:
+
+- Step 1: 80 commits in 11.82s, DB 3.21 MB.
+- Step 2: 80 more commits in 19.25s, DB 6.81 MB.
+- Step 3: 80 more commits in 56.88s, DB 11.84 MB.
+- Skip check over already-indexed latest batch: 0 commits + 5 docs in 1.41s.
+- Docs-only check: 0 commits + 5 docs in 1.36s.
+- Final DB: 240 commits, sequence range 1..240, 5 review docs, 23 snippets, 11.84 MB.
+- Static export: `/tmp/gcb-full-export`, served on `http://127.0.0.1:4182/`.
+- Browser validation confirmed the all-widget review doc rendered with no visible widget errors and the history page showed 240 commits.
