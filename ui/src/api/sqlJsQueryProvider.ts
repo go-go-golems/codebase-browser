@@ -1,4 +1,4 @@
-import type { DocPage, ReviewDocMeta, SnippetRef } from './docApi';
+import type { DocPage, ReviewDiagnostic, ReviewDocMeta, ReviewPageBlock, SnippetRef } from './docApi';
 import type { FileXrefResponse, FileXrefUseTarget, SnippetRefView, SourceRefView } from './sourceApi';
 import type { File, IndexSummary, Package, PackageLite, Symbol } from './types';
 import type { RefRecord, XrefResponse, XrefUseTarget } from './xrefApi';
@@ -14,6 +14,7 @@ import type {
   SymbolDiff,
   SymbolHistoryEntry,
 } from './historyApi';
+import type { CodebaseQueryProvider, ImpactQueryOptions } from './queryProvider';
 import type initSqlJs from 'sql.js';
 
 import { QueryError } from './queryErrors';
@@ -31,6 +32,7 @@ type CommitRowSQL = SqlRow & {
   AuthorEmail: string;
   AuthorTime: number;
   IndexedAt: number;
+  Sequence: number;
   Branch: string;
   Error: string;
 };
@@ -98,12 +100,25 @@ type SymbolMetaSQL = SqlRow & {
 
 type ReviewDocMetaSQL = SqlRow & ReviewDocMeta;
 
-type ReviewDocSQL = SqlRow & {
+type ReviewPageSQL = SqlRow & {
   slug: string;
   title: string;
-  html: string;
-  snippetsJson: string;
-  errorsJson: string;
+  blocksJson: string;
+  diagnosticsJson: string;
+};
+
+type ReviewSnippetSQL = SqlRow & {
+  stubId: string;
+  directive: string;
+  symbolId: string | null;
+  filePath: string | null;
+  kind: string | null;
+  language: string | null;
+  text: string;
+  paramsJson: string;
+  startLine: number;
+  endLine: number;
+  commitHash: string | null;
 };
 
 type PackageSQL = SqlRow & {
@@ -147,18 +162,11 @@ type SymbolSQL = SqlRow & {
   tagsJson: string;
 };
 
-let provider: SqlJsQueryProvider | null = null;
+export class SqlJsQueryProvider implements CodebaseQueryProvider {
+  private commitsPromise: Promise<CommitRow[]> | null = null;
+  private readonly resolvedCommitRefs = new Map<string, Promise<string>>();
+  private readonly commitsByRef = new Map<string, Promise<CommitRow>>();
 
-export function getSqlJsProvider(): SqlJsQueryProvider {
-  if (!provider) provider = new SqlJsQueryProvider();
-  return provider;
-}
-
-export function resetSqlJsProviderForTests(): void {
-  provider = null;
-}
-
-export class SqlJsQueryProvider {
   constructor(private readonly loadDb: DbLoader = getStaticDb) {}
 
   private async getDb(): Promise<Database> {
@@ -304,36 +312,73 @@ export class SqlJsQueryProvider {
   }
 
   async listCommits(): Promise<CommitRow[]> {
-    const db = await this.getDb();
-    return queryAll<CommitRowSQL>(db, `
-      SELECT hash AS Hash,
-             short_hash AS ShortHash,
-             message AS Message,
-             author_name AS AuthorName,
-             author_email AS AuthorEmail,
-             author_time AS AuthorTime,
-             indexed_at AS IndexedAt,
-             branch AS Branch,
-             error AS Error
-      FROM commits
-      WHERE error = ''
-      ORDER BY author_time DESC
-    `).map((row) => ({ ...row }));
+    let commits = this.commitsPromise;
+    if (!commits) {
+      commits = (async () => {
+        const db = await this.getDb();
+        return queryAll<CommitRowSQL>(db, `
+          SELECT hash AS Hash,
+                 short_hash AS ShortHash,
+                 message AS Message,
+                 author_name AS AuthorName,
+                 author_email AS AuthorEmail,
+                 author_time AS AuthorTime,
+                 indexed_at AS IndexedAt,
+                 sequence AS Sequence,
+                 branch AS Branch,
+                 error AS Error
+          FROM commits
+          WHERE error = ''
+          ORDER BY sequence DESC, author_time DESC
+        `).map((row) => ({ ...row }));
+      })();
+      this.commitsPromise = commits;
+    }
+    return commits.then((rows) => rows.map((row) => ({ ...row })));
   }
 
   async resolveCommitRef(ref: string): Promise<string> {
+    const normalizedRef = ref || 'HEAD';
+    let resolved = this.resolvedCommitRefs.get(normalizedRef);
+    if (!resolved) {
+      resolved = this.resolveCommitRefUncached(normalizedRef).catch((error) => {
+        this.resolvedCommitRefs.delete(normalizedRef);
+        throw error;
+      });
+      this.resolvedCommitRefs.set(normalizedRef, resolved);
+    }
+    return resolved;
+  }
+
+  private async resolveCommitRefUncached(ref: string): Promise<string> {
     const commits = await this.listCommits();
     if (commits.length === 0) throw new QueryError('NOT_FOUND', 'no indexed commits in database');
 
-    const ordered = [...commits].sort((a, b) => a.AuthorTime - b.AuthorTime);
+    const ordered = [...commits].sort((a, b) => (a.Sequence - b.Sequence) || (a.AuthorTime - b.AuthorTime));
     const newestIndex = ordered.length - 1;
-    if (!ref || ref === 'HEAD') return ordered[newestIndex].Hash;
+    const newest = ordered[newestIndex];
+    const oldest = ordered[0];
+    const commitContext = {
+      requestedRef: ref,
+      indexedCommitCount: ordered.length,
+      supportedHeadRefs: ordered.length === 1 ? ['HEAD'] : [`HEAD..HEAD~${ordered.length - 1}`],
+      newest: newest ? { hash: newest.Hash, shortHash: newest.ShortHash, message: newest.Message } : undefined,
+      oldest: oldest ? { hash: oldest.Hash, shortHash: oldest.ShortHash, message: oldest.Message } : undefined,
+    };
+    if (ref === 'HEAD') return newest.Hash;
 
     const headOffset = ref.match(/^HEAD~(\d+)$/);
     if (headOffset) {
-      const index = newestIndex - Number.parseInt(headOffset[1], 10);
+      const offset = Number.parseInt(headOffset[1], 10);
+      const index = newestIndex - offset;
       const commit = ordered[index];
-      if (!commit) throw new QueryError('NOT_FOUND', `commit ref not found: ${ref}`);
+      if (!commit) {
+        throw new QueryError(
+          'NOT_FOUND',
+          `commit ref ${ref} is outside this export's indexed range (${ordered.length} commit${ordered.length === 1 ? '' : 's'} available; deepest supported ref is HEAD~${ordered.length - 1})`,
+          { ...commitContext, requestedOffset: offset },
+        );
+      }
       return commit.Hash;
     }
 
@@ -342,17 +387,37 @@ export class SqlJsQueryProvider {
 
     const prefixMatches = ordered.filter((commit) => commit.Hash.startsWith(ref));
     if (prefixMatches.length === 1) return prefixMatches[0].Hash;
-    if (prefixMatches.length > 1) throw new QueryError('AMBIGUOUS_REF', `ambiguous commit ref: ${ref}`);
+    if (prefixMatches.length > 1) {
+      throw new QueryError('AMBIGUOUS_REF', `ambiguous commit ref: ${ref}`, {
+        ...commitContext,
+        matches: prefixMatches.map((commit) => ({ hash: commit.Hash, shortHash: commit.ShortHash, message: commit.Message })),
+      });
+    }
 
-    throw new QueryError('NOT_FOUND', `commit ref not found: ${ref}`);
+    throw new QueryError(
+      'NOT_FOUND',
+      `commit ref ${ref} was not found in this static export (${ordered.length} indexed commit${ordered.length === 1 ? '' : 's'})`,
+      commitContext,
+    );
   }
 
   async getCommit(ref: string): Promise<CommitRow> {
-    const hash = await this.resolveCommitRef(ref);
-    const commits = await this.listCommits();
-    const commit = commits.find((row) => row.Hash === hash);
-    if (!commit) throw new QueryError('NOT_FOUND', `commit not found: ${ref}`);
-    return commit;
+    const normalizedRef = ref || 'HEAD';
+    let commit = this.commitsByRef.get(normalizedRef);
+    if (!commit) {
+      commit = (async () => {
+        const hash = await this.resolveCommitRef(normalizedRef);
+        const commits = await this.listCommits();
+        const row = commits.find((candidate) => candidate.Hash === hash);
+        if (!row) throw new QueryError('NOT_FOUND', `commit not found: ${ref}`);
+        return Object.freeze({ ...row });
+      })().catch((error) => {
+        this.commitsByRef.delete(normalizedRef);
+        throw error;
+      });
+      this.commitsByRef.set(normalizedRef, commit);
+    }
+    return commit.then((row) => ({ ...row }));
   }
 
   async getSymbolHistory(symbolId: string): Promise<SymbolHistoryEntry[]> {
@@ -429,12 +494,7 @@ export class SqlJsQueryProvider {
     };
   }
 
-  async getImpact(options: {
-    symbolId: string;
-    direction: 'usedby' | 'uses';
-    depth: number;
-    commit?: string;
-  }): Promise<ImpactResponse> {
+  async getImpact(options: ImpactQueryOptions): Promise<ImpactResponse> {
     const commit = await this.resolveCommitRef(options.commit ?? 'HEAD');
     const direction = options.direction;
     const maxDepth = Math.max(1, Math.min(options.depth, 5));
@@ -486,29 +546,48 @@ export class SqlJsQueryProvider {
     const db = await this.getDb();
     return queryAll<ReviewDocMetaSQL>(db, `
       SELECT slug, title
-      FROM static_review_rendered_docs
+      FROM static_review_pages
       ORDER BY slug
     `).map((row) => ({ slug: row.slug, title: row.title }));
   }
 
   async getReviewDoc(slug: string): Promise<DocPage> {
     const db = await this.getDb();
-    const row = queryOne<ReviewDocSQL>(db, `
+    const row = queryOne<ReviewPageSQL>(db, `
       SELECT slug,
              title,
-             html,
-             snippets_json AS snippetsJson,
-             errors_json AS errorsJson
-      FROM static_review_rendered_docs
+             blocks_json AS blocksJson,
+             diagnostics_json AS diagnosticsJson
+      FROM static_review_pages
       WHERE slug = ?
     `, [slug]);
     if (!row) throw new QueryError('NOT_FOUND', `review doc not found: ${slug}`);
+    const snippets = queryAll<ReviewSnippetSQL>(db, `
+      SELECT s.stub_id AS stubId,
+             s.directive,
+             s.symbol_id AS symbolId,
+             s.file_path AS filePath,
+             s.kind,
+             s.language,
+             s.text,
+             s.params_json AS paramsJson,
+             s.start_line AS startLine,
+             s.end_line AS endLine,
+             s.commit_hash AS commitHash
+      FROM review_docs d
+      JOIN review_doc_snippets s ON s.doc_id = d.id
+      WHERE d.slug = ?
+      ORDER BY s.id
+    `, [slug]).map(toSnippetRef);
+    const diagnostics = parseJSON<ReviewDiagnostic[]>(row.diagnosticsJson, []);
     return {
       slug: row.slug,
       title: row.title,
-      html: row.html,
-      snippets: parseJSON<SnippetRef[]>(row.snippetsJson, []),
-      errors: parseJSON<string[]>(row.errorsJson, []),
+      html: '',
+      blocks: parseJSON<ReviewPageBlock[]>(row.blocksJson, []),
+      snippets,
+      diagnostics,
+      errors: diagnostics.map((diagnostic) => diagnostic.message),
     };
   }
 
@@ -572,7 +651,7 @@ export class SqlJsQueryProvider {
     const db = await this.getDb();
     const row = queryOne<FileContentMetaSQL>(db, `
       SELECT id AS fileId,
-             COALESCE(NULLIF(content_hash, ''), sha256) AS contentHash
+             sha256 AS contentHash
       FROM snapshot_files
       WHERE commit_hash = ? AND path = ?
     `, [commit, path]);
@@ -592,7 +671,7 @@ export class SqlJsQueryProvider {
              s.file_id AS fileId,
              s.signature AS signature,
              f.path AS filePath,
-             COALESCE(NULLIF(f.content_hash, ''), f.sha256) AS contentHash
+             f.sha256 AS contentHash
       FROM snapshot_symbols s
       JOIN snapshot_files f
         ON f.commit_hash = s.commit_hash
@@ -634,68 +713,148 @@ export class SqlJsQueryProvider {
 
   private async getRefRecordsFrom(symbolId: string, commit: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ? AND from_symbol_id = ?
-      ORDER BY to_symbol_id, kind
+    return queryAll<RefRecordSQL>(db, normalizedRefRecordSelectSQL + `
+      JOIN symbols source_filter
+        ON source_filter.id = rv.from_symbol_id
+      WHERE c.hash = ?
+        AND source_filter.stable_id = ?
+      ORDER BY rv.to_stable_id, rv.kind
     `, [commit, symbolId]).map(toRefRecord);
   }
 
   private async getRefRecordsTo(symbolId: string, commit: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ? AND to_symbol_id = ?
-      ORDER BY from_symbol_id, kind
+    return queryAll<RefRecordSQL>(db, normalizedRefRecordSelectSQL + `
+      WHERE c.hash = ?
+        AND rv.to_stable_id = ?
+      ORDER BY s.stable_id, rv.kind
     `, [commit, symbolId]).map(toRefRecord);
   }
 
   private async getRefRecordsInFile(commit: string, fileId: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ? AND file_id = ?
-      ORDER BY start_offset, end_offset
+    return queryAll<RefRecordSQL>(db, normalizedRefRecordSelectSQL + `
+      WHERE c.hash = ?
+        AND f.stable_id = ?
+      ORDER BY startOffset, endOffset
     `, [commit, fileId]).map(toRefRecord);
   }
 
   private async getRefRecordsInFileRange(commit: string, fileId: string, startOffset: number, endOffset: number): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQL + `
-      WHERE commit_hash = ?
-        AND file_id = ?
-        AND start_offset >= ?
-        AND end_offset <= ?
-      ORDER BY start_offset, end_offset
+    return queryAll<RefRecordSQL>(db, `
+      SELECT *
+      FROM (${normalizedRefRecordSelectSQL}
+        WHERE c.hash = ?
+          AND f.stable_id = ?
+      ) refs
+      WHERE refs.startOffset >= ?
+        AND refs.endOffset <= ?
+      ORDER BY refs.startOffset, refs.endOffset
     `, [commit, fileId, startOffset, endOffset]).map(toRefRecord);
   }
 
   private async getRefRecordsToFileSymbols(commit: string, fileId: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQLWithAlias + `
-      JOIN snapshot_symbols target
-        ON target.commit_hash = r.commit_hash
-       AND target.id = r.to_symbol_id
-      LEFT JOIN snapshot_symbols source
-        ON source.commit_hash = r.commit_hash
-       AND source.id = r.from_symbol_id
-      WHERE r.commit_hash = ?
-        AND target.file_id = ?
-        AND COALESCE(source.file_id, '') != ?
-      ORDER BY r.from_symbol_id, r.kind
+    return queryAll<RefRecordSQL>(db, `
+      WITH current_commit AS (
+        SELECT id
+        FROM commits
+        WHERE hash = ?
+      ),
+      target_symbols AS (
+        SELECT s.stable_id
+        FROM current_commit c
+        JOIN commit_symbols cs
+          ON cs.commit_id = c.id
+        JOIN symbols s
+          ON s.id = cs.symbol_id
+        JOIN files f
+          ON f.id = s.file_id
+        WHERE f.stable_id = ?
+      )
+      SELECT s.stable_id AS fromSymbolId,
+             rv.to_stable_id AS toSymbolId,
+             rv.kind,
+             f.stable_id AS fileId,
+             json_extract(j.value, '$.start_line') AS startLine,
+             json_extract(j.value, '$.start_col') AS startCol,
+             json_extract(j.value, '$.end_line') AS endLine,
+             json_extract(j.value, '$.end_col') AS endCol,
+             json_extract(j.value, '$.start_offset') AS startOffset,
+             json_extract(j.value, '$.end_offset') AS endOffset
+      FROM current_commit c
+      JOIN target_symbols target
+      JOIN ref_versions rv INDEXED BY idx_ref_to
+        ON rv.to_stable_id = target.stable_id
+      JOIN commit_refs cr
+        ON cr.commit_id = c.id
+       AND cr.ref_version_id = rv.id
+      JOIN symbols s
+        ON s.id = rv.from_symbol_id
+      JOIN files source_file
+        ON source_file.id = s.file_id
+      JOIN files f
+        ON f.id = rv.file_id
+      JOIN json_each(rv.locations_json) j
+      WHERE source_file.stable_id != ?
+      ORDER BY s.stable_id, rv.kind
     `, [commit, fileId, fileId]).map(toRefRecord);
   }
 
   private async getRefRecordsFromFileSymbols(commit: string, fileId: string): Promise<RefRecord[]> {
     const db = await this.getDb();
-    return queryAll<RefRecordSQL>(db, refRecordSelectSQLWithAlias + `
-      JOIN snapshot_symbols source
-        ON source.commit_hash = r.commit_hash
-       AND source.id = r.from_symbol_id
-      LEFT JOIN snapshot_symbols target
-        ON target.commit_hash = r.commit_hash
-       AND target.id = r.to_symbol_id
-      WHERE r.commit_hash = ?
-        AND source.file_id = ?
-        AND COALESCE(target.file_id, '') != ?
-      ORDER BY r.to_symbol_id, r.kind
+    return queryAll<RefRecordSQL>(db, `
+      WITH current_commit AS (
+        SELECT id
+        FROM commits
+        WHERE hash = ?
+      ),
+      source_symbols AS (
+        SELECT s.id, s.stable_id
+        FROM current_commit c
+        JOIN commit_symbols cs
+          ON cs.commit_id = c.id
+        JOIN symbols s
+          ON s.id = cs.symbol_id
+        JOIN files f
+          ON f.id = s.file_id
+        WHERE f.stable_id = ?
+      ),
+      target_symbols AS (
+        SELECT s.stable_id, f.stable_id AS file_id
+        FROM current_commit c
+        JOIN commit_symbols cs
+          ON cs.commit_id = c.id
+        JOIN symbols s
+          ON s.id = cs.symbol_id
+        JOIN files f
+          ON f.id = s.file_id
+      )
+      SELECT source.stable_id AS fromSymbolId,
+             rv.to_stable_id AS toSymbolId,
+             rv.kind,
+             f.stable_id AS fileId,
+             json_extract(j.value, '$.start_line') AS startLine,
+             json_extract(j.value, '$.start_col') AS startCol,
+             json_extract(j.value, '$.end_line') AS endLine,
+             json_extract(j.value, '$.end_col') AS endCol,
+             json_extract(j.value, '$.start_offset') AS startOffset,
+             json_extract(j.value, '$.end_offset') AS endOffset
+      FROM current_commit c
+      JOIN source_symbols source
+      JOIN ref_versions rv INDEXED BY idx_ref_from
+        ON rv.from_symbol_id = source.id
+      JOIN commit_refs cr
+        ON cr.commit_id = c.id
+       AND cr.ref_version_id = rv.id
+      JOIN files f
+        ON f.id = rv.file_id
+      LEFT JOIN target_symbols target
+        ON target.stable_id = rv.to_stable_id
+      JOIN json_each(rv.locations_json) j
+      WHERE COALESCE(target.file_id, '') != ?
+      ORDER BY rv.to_stable_id, rv.kind
     `, [commit, fileId, fileId]).map(toRefRecord);
   }
 
@@ -709,37 +868,44 @@ export class SqlJsQueryProvider {
   }
 }
 
-const refRecordColumnsSQL = `
-  from_symbol_id AS fromSymbolId,
-  to_symbol_id AS toSymbolId,
-  kind,
-  file_id AS fileId,
-  start_line AS startLine,
-  start_col AS startCol,
-  end_line AS endLine,
-  end_col AS endCol,
-  start_offset AS startOffset,
-  end_offset AS endOffset
+const normalizedRefRecordSelectSQL = `
+  SELECT s.stable_id AS fromSymbolId,
+         rv.to_stable_id AS toSymbolId,
+         rv.kind,
+         f.stable_id AS fileId,
+         json_extract(j.value, '$.start_line') AS startLine,
+         json_extract(j.value, '$.start_col') AS startCol,
+         json_extract(j.value, '$.end_line') AS endLine,
+         json_extract(j.value, '$.end_col') AS endCol,
+         json_extract(j.value, '$.start_offset') AS startOffset,
+         json_extract(j.value, '$.end_offset') AS endOffset
+  FROM commits c
+  JOIN commit_refs cr
+    ON cr.commit_id = c.id
+  JOIN ref_versions rv
+    ON rv.id = cr.ref_version_id
+  JOIN symbols s
+    ON s.id = rv.from_symbol_id
+  JOIN files f
+    ON f.id = rv.file_id
+  JOIN json_each(rv.locations_json) j
 `;
 
-const refRecordSelectSQL = `
-  SELECT ${refRecordColumnsSQL}
-  FROM snapshot_refs
-`;
-
-const refRecordSelectSQLWithAlias = `
-  SELECT r.from_symbol_id AS fromSymbolId,
-         r.to_symbol_id AS toSymbolId,
-         r.kind,
-         r.file_id AS fileId,
-         r.start_line AS startLine,
-         r.start_col AS startCol,
-         r.end_line AS endLine,
-         r.end_col AS endCol,
-         r.start_offset AS startOffset,
-         r.end_offset AS endOffset
-  FROM snapshot_refs r
-`;
+function toSnippetRef(row: ReviewSnippetSQL): SnippetRef {
+  return {
+    stubId: row.stubId,
+    directive: row.directive,
+    symbolId: row.symbolId ?? undefined,
+    filePath: row.filePath ?? undefined,
+    kind: row.kind ?? undefined,
+    language: row.language ?? undefined,
+    text: row.text,
+    params: parseJSON<Record<string, string>>(row.paramsJson, {}),
+    startLine: row.startLine,
+    endLine: row.endLine,
+    commitHash: row.commitHash ?? undefined,
+  };
+}
 
 function toRefRecord(row: RefRecordSQL): RefRecord {
   return {

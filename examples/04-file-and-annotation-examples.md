@@ -9,15 +9,15 @@ This example demonstrates file-level widgets and inline annotations.
 
 ## Annotation on the Export function
 
-```codebase-annotation sym=staticapp.Export lines=40-60 note="Options field set by the CLI command; RepoRoot defaults to '.'"
+```codebase-annotation sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export lines=40-60 note="Options field set by the CLI command; RepoRoot defaults to '.'"
 ```
 
 ## Signature and doc for Export
 
-```codebase-signature sym=staticapp.Export
+```codebase-signature sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 ```
 
-```codebase-doc sym=staticapp.Export
+```codebase-doc sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 ```
 
 ## Notes

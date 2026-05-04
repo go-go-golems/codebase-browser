@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -55,6 +56,12 @@ func TestExportCopiesDBWritesManifestAndOmitsLegacyRuntimeFiles(t *testing.T) {
 	if manifest.Runtime.QueryEngine != "sql.js" || manifest.Runtime.HasGoRuntimeServer {
 		t.Fatalf("unexpected runtime manifest: %+v", manifest.Runtime)
 	}
+	if manifest.DB.HistorySchemaVersion != "3" || manifest.DB.ReviewSchemaVersion != "2" {
+		t.Fatalf("unexpected schema versions in manifest: %+v", manifest.DB)
+	}
+	if manifest.DB.SchemaVersions["history_schema_version"] != "3" {
+		t.Fatalf("schema version map missing history version: %+v", manifest.DB.SchemaVersions)
+	}
 	if manifest.Commits.Count != 1 || manifest.Features.ReviewDocs {
 		t.Fatalf("unexpected manifest counts/features: commits=%+v features=%+v", manifest.Commits, manifest.Features)
 	}
@@ -63,7 +70,7 @@ func TestExportCopiesDBWritesManifestAndOmitsLegacyRuntimeFiles(t *testing.T) {
 func TestAddRenderedReviewDocsCreatesStaticTableOnCopiedDB(t *testing.T) {
 	ctx := context.Background()
 	dbPath := createStaticAppFixtureDB(t, true)
-	if err := AddRenderedReviewDocs(ctx, dbPath, t.TempDir()); err != nil {
+	if err := AddRenderedReviewDocs(ctx, dbPath, t.TempDir(), false); err != nil {
 		t.Fatalf("AddRenderedReviewDocs() error = %v", err)
 	}
 
@@ -73,22 +80,22 @@ func TestAddRenderedReviewDocsCreatesStaticTableOnCopiedDB(t *testing.T) {
 	}
 	defer db.Close()
 
-	var title, html, snippetsJSON, errorsJSON string
+	var title, blocksJSON, diagnosticsJSON string
 	if err := db.QueryRow(`
-		SELECT title, html, snippets_json, errors_json
-		FROM static_review_rendered_docs
+		SELECT title, blocks_json, diagnostics_json
+		FROM static_review_pages
 		WHERE slug = 'fixture'
-	`).Scan(&title, &html, &snippetsJSON, &errorsJSON); err != nil {
-		t.Fatalf("query rendered doc: %v", err)
+	`).Scan(&title, &blocksJSON, &diagnosticsJSON); err != nil {
+		t.Fatalf("query structured review page: %v", err)
 	}
 	if title != "Fixture Review" {
 		t.Fatalf("title = %q", title)
 	}
-	if html == "" {
-		t.Fatalf("html is empty")
+	if !strings.Contains(blocksJSON, `"type":"markdown"`) {
+		t.Fatalf("structured blocks do not contain markdown block: %s", blocksJSON)
 	}
-	if snippetsJSON != "[]" || errorsJSON != "[]" {
-		t.Fatalf("unexpected rendered metadata snippets=%s errors=%s", snippetsJSON, errorsJSON)
+	if diagnosticsJSON != "[]" {
+		t.Fatalf("unexpected structured diagnostics: %s", diagnosticsJSON)
 	}
 }
 
@@ -102,14 +109,16 @@ func createStaticAppFixtureDB(t *testing.T, withReviewDoc bool) string {
 	defer store.Close()
 	db := store.DB()
 	if _, err := db.Exec(`
-		INSERT INTO commits(hash, short_hash, message, author_name, author_email, author_time, parent_hashes, tree_hash, indexed_at, branch, error)
-		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaa', 'fixture', 'Test', 'test@example.com', 100, '[]', '', 100, '', '');
-		INSERT INTO snapshot_packages(commit_hash, id, import_path, name, doc, language)
-		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'pkg:fixture', 'fixture', 'fixture', '', 'go');
-		INSERT INTO snapshot_files(commit_hash, id, path, package_id, size, line_count, sha256, language, build_tags_json, content_hash)
-		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'file:fixture.go', 'fixture.go', 'pkg:fixture', 12, 1, 'hash-fixture', 'go', '[]', 'hash-fixture');
+		INSERT INTO commits(hash, short_hash, message, author_name, author_email, author_time, parent_hashes, tree_hash, indexed_at, sequence, branch, error)
+		VALUES ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'aaaaaaa', 'fixture', 'Test', 'test@example.com', 100, '[]', '', 100, 1, '', '');
+		INSERT INTO packages(stable_id, import_path, name, doc, language)
+		VALUES ('pkg:fixture', 'fixture', 'fixture', '', 'go');
+		INSERT INTO files(stable_id, path, package_id, size, line_count, sha256, language, build_tags_json)
+		VALUES ('file:fixture.go', 'fixture.go', 1, 12, 1, 'hash-fixture', 'go', '[]');
 		INSERT INTO file_contents(content_hash, content)
 		VALUES ('hash-fixture', CAST('package fixture' AS BLOB));
+		INSERT INTO commit_packages(commit_id, package_id) VALUES (1, 1);
+		INSERT INTO commit_files(commit_id, file_id) VALUES (1, 1);
 	`); err != nil {
 		t.Fatalf("insert fixture history rows: %v", err)
 	}

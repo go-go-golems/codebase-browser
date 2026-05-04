@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
-import { getSqlJsProvider } from './sqlJsQueryProvider';
-import { normalizeQueryError } from './queryErrors';
+import { getSqlJsProvider } from './sqlJsProviderRegistry';
+import { normalizeQueryError, type ProviderError } from './queryErrors';
 
 export interface SnippetRef {
   stubId: string;
@@ -10,30 +10,43 @@ export interface SnippetRef {
   kind?: string;
   language?: string;
   text: string;
+  commitHash?: string;
+  params?: Record<string, string>;
   startLine?: number;
   endLine?: number;
+}
+
+export interface ReviewDiagnostic {
+  severity: string;
+  line?: number;
+  directive?: string;
+  message: string;
+}
+
+export interface ReviewPageBlock {
+  type: 'markdown' | 'widget';
+  id?: string;
+  html?: string;
+  directive?: string;
+  props?: Record<string, string>;
+  body?: string;
+  line?: number;
 }
 
 export interface DocPage {
   slug: string;
   title: string;
-  html: string;
+  html?: string;
   snippets: SnippetRef[];
   errors?: string[];
-}
-
-export interface PageMeta {
-  slug: string;
-  title: string;
-  path: string;
+  blocks?: ReviewPageBlock[];
+  diagnostics?: ReviewDiagnostic[];
 }
 
 export interface ReviewDocMeta {
   slug: string;
   title: string;
 }
-
-type ProviderError = { status: string; data?: string };
 
 const noopBaseQuery: BaseQueryFn<void, unknown, ProviderError> = async () => ({ data: undefined });
 
@@ -50,12 +63,6 @@ export const docApi = createApi({
   baseQuery: noopBaseQuery,
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
-    listDocs: b.query<PageMeta[], void>({
-      queryFn: async () => ({ data: [] }),
-    }),
-    getDoc: b.query<DocPage, string>({
-      queryFn: (slug) => providerResult(() => getSqlJsProvider().getReviewDoc(slug)),
-    }),
     listReviewDocs: b.query<ReviewDocMeta[], void>({
       queryFn: () => providerResult(() => getSqlJsProvider().listReviewDocs()),
     }),
@@ -65,4 +72,4 @@ export const docApi = createApi({
   }),
 });
 
-export const { useListDocsQuery, useGetDocQuery, useListReviewDocsQuery, useGetReviewDocQuery } = docApi;
+export const { useListReviewDocsQuery, useGetReviewDocQuery } = docApi;

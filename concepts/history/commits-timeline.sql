@@ -17,5 +17,5 @@ SELECT hash, short_hash, message, author_name,
        (SELECT COUNT(1) FROM snapshot_symbols ss WHERE ss.commit_hash = c.hash) AS symbol_count
 FROM   commits c
 WHERE  c.branch LIKE '%' || {{sqlString .branch}} || '%'
-ORDER BY author_time DESC
+ORDER BY sequence DESC, author_time DESC
 LIMIT  {{.limit}};

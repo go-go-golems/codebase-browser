@@ -9,10 +9,10 @@ import (
 
 func newExportCmd() *cobra.Command {
 	var (
-		dbPath        string
-		outDir        string
-		repoRoot      string
-		includeSource bool
+		dbPath     string
+		outDir     string
+		repoRoot   string
+		strictDocs bool
 	)
 
 	cmd := &cobra.Command{
@@ -28,7 +28,7 @@ The export requires a review database produced by 'review index' or 'review db c
 
 Examples:
   codebase-browser review export --db pr-42.db --out ./pr-42-export/
-  codebase-browser review export --db review.db --out /tmp/export/ --include-source`,
+  codebase-browser review export --db review.db --out /tmp/export/`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if dbPath == "" {
 				return fmt.Errorf("--db is required")
@@ -41,17 +41,17 @@ Examples:
 				DBPath:           dbPath,
 				OutDir:           outDir,
 				RepoRoot:         repoRoot,
-				IncludeSource:    includeSource,
 				BuildSPA:         true,
 				RenderReviewDocs: true,
+				StrictDocs:       strictDocs,
 			})
 		},
 	}
 
 	cmd.Flags().StringVar(&dbPath, "db", "", "Path to review database (required)")
 	cmd.Flags().StringVar(&outDir, "out", "", "Output directory for the static export (required)")
-	cmd.Flags().StringVar(&repoRoot, "repo-root", ".", "Repository root used for optional source export")
-	cmd.Flags().BoolVar(&includeSource, "include-source", false, "Copy the embedded source tree into the export directory")
+	cmd.Flags().StringVar(&repoRoot, "repo-root", ".", "Repository root label used in the export manifest")
+	cmd.Flags().BoolVar(&strictDocs, "strict-docs", false, "Fail if markdown review docs contain unresolved codebase-* directives")
 
 	_ = cmd.MarkFlagRequired("db")
 	_ = cmd.MarkFlagRequired("out")

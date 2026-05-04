@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
-import { normalizeQueryError } from './queryErrors';
-import { getSqlJsProvider } from './sqlJsQueryProvider';
+import { normalizeQueryError, type ProviderError } from './queryErrors';
+import { getSqlJsProvider } from './sqlJsProviderRegistry';
 
 export interface CommitRow {
   Hash: string;
@@ -10,6 +10,7 @@ export interface CommitRow {
   AuthorEmail: string;
   AuthorTime: number;
   IndexedAt: number;
+  Sequence: number;
   Branch: string;
   Error: string;
 }
@@ -118,8 +119,6 @@ export interface ImpactResponse {
   commit: string;
   nodes: ImpactNode[];
 }
-
-type ProviderError = { status: string; data?: string };
 
 const noopBaseQuery: BaseQueryFn<void, unknown, ProviderError> = async () => ({ data: undefined });
 

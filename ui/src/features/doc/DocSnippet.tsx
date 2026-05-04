@@ -2,7 +2,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useGetSymbolQuery } from '../../api/indexApi';
-import { getSqlJsProvider } from '../../api/sqlJsQueryProvider';
+import { getSqlJsProvider } from '../../api/sqlJsProviderRegistry';
 import { ExpandableSymbol } from '../symbol/ExpandableSymbol';
 import { XrefPanel } from '../symbol/XrefPanel';
 import { Code } from '../../packages/ui/src/Code';
@@ -62,10 +62,10 @@ function useGetSnippetFromCommit(
 }
 
 /**
- * DocSnippet hydrates one `[data-codebase-snippet]` stub on a doc page.
- * The server-rendered stub carries the symbol id + directive type; we
- * dispatch to the right widget so every directive on a doc page gets
- * the same interactive treatment a /symbol/{id} page does:
+ * DocSnippet renders one structured review widget block. The backend resolves
+ * directive metadata and snippets into SQLite rows; the review page then
+ * dispatches to the right widget so every directive gets the same interactive
+ * treatment a /symbol/{id} page does:
  *
  *   - codebase-snippet    → <LinkedCode> with clickable xrefs
  *   - codebase-signature  → compact <Link> to the symbol
@@ -78,9 +78,13 @@ export interface DocSnippetProps {
   lang: string;
   commit?: string;
   params?: Record<string, string>;
+  text?: string;
 }
 
-export function DocSnippet({ sym, directive, lang, commit, params }: DocSnippetProps) {
+export function DocSnippet({ sym, directive, lang, commit, params, text }: DocSnippetProps) {
+  if (directive === 'codebase-file') {
+    return <Code text={text ?? ''} language={lang || 'text'} />;
+  }
   if (directive === 'codebase-diff') {
     return <SymbolDiffInlineWidget sym={sym} from={params?.from ?? ''} to={params?.to ?? ''} />;
   }
@@ -118,7 +122,15 @@ export function DocSnippet({ sym, directive, lang, commit, params }: DocSnippetP
     );
   }
   if (directive === 'codebase-commit-walk') {
-    return <CommitWalkWidget title={params?.title} stepsJSON={params?.steps} />;
+    return (
+      <CommitWalkWidget
+        title={params?.title}
+        stepsJSON={params?.steps}
+        commit={params?.commit}
+        from={params?.from}
+        to={params?.to}
+      />
+    );
   }
   if (directive === 'codebase-signature') return <DocSignature sym={sym} commit={commit} language={lang} />;
   if (directive === 'codebase-doc') return <DocGodoc sym={sym} commit={commit} />;

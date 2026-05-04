@@ -24,6 +24,9 @@ type Commit struct {
 	AuthorTime   time.Time
 	ParentHashes []string
 	TreeHash     string
+	// Sequence is an explicit range-order value assigned by review indexing.
+	// Higher values are considered later in the indexed review range.
+	Sequence int
 }
 
 // LogCommits lists commits in the given range. The rangeSpec is passed

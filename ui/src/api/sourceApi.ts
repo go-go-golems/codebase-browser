@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
-import { normalizeQueryError } from './queryErrors';
-import { getSqlJsProvider } from './sqlJsQueryProvider';
+import { normalizeQueryError, type ProviderError } from './queryErrors';
+import { getSqlJsProvider } from './sqlJsProviderRegistry';
 
 export type SnippetKind = 'declaration' | 'body' | 'signature';
 
@@ -38,8 +38,6 @@ export interface FileXrefResponse {
   usedBy: FileXrefRef[];
   uses: FileXrefUseTarget[];
 }
-
-type ProviderError = { status: string; data?: string };
 
 const noopBaseQuery: BaseQueryFn<void, unknown, ProviderError> = async () => ({ data: undefined });
 

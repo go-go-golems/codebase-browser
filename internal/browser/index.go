@@ -45,9 +45,17 @@ func LoadFromBytes(data []byte) (*Loaded, error) {
 	if err := json.Unmarshal(data, &idx); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
+	loaded := LoadIndex(&idx)
+	loaded.Raw = data
+	return loaded, nil
+}
+
+// LoadIndex wraps an in-memory index with the lookup maps used by browser
+// helpers. Use this when the index was reconstructed from SQLite rather than
+// decoded from index.json.
+func LoadIndex(idx *indexer.Index) *Loaded {
 	l := &Loaded{
-		Raw:         data,
-		Index:       &idx,
+		Index:       idx,
 		byPackageID: make(map[string]*indexer.Package, len(idx.Packages)),
 		byFileID:    make(map[string]*indexer.File, len(idx.Files)),
 		bySymbolID:  make(map[string]*indexer.Symbol, len(idx.Symbols)),
@@ -61,7 +69,7 @@ func LoadFromBytes(data []byte) (*Loaded, error) {
 	for i := range idx.Symbols {
 		l.bySymbolID[idx.Symbols[i].ID] = &idx.Symbols[i]
 	}
-	return l, nil
+	return l
 }
 
 func (l *Loaded) Package(id string) (*indexer.Package, bool) {

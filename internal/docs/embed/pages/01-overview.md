@@ -8,18 +8,18 @@ type, const, or var.
 The symbol ID scheme deliberately uses the import path rather than the
 file path. This makes IDs survive file moves:
 
-```codebase-signature sym=github.com/wesen/codebase-browser/internal/indexer.SymbolID
+```codebase-signature sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.SymbolID
 ```
 
 The actual implementation:
 
-```codebase-snippet sym=github.com/wesen/codebase-browser/internal/indexer.SymbolID
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.SymbolID
 ```
 
 Method IDs embed the receiver name because two different types can have
 methods with the same name in the same package:
 
-```codebase-snippet sym=github.com/wesen/codebase-browser/internal/indexer.MethodID
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.MethodID
 ```
 
 Entry point for extraction — note how the loader config requests

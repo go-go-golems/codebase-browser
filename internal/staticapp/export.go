@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,9 +24,9 @@ type Options struct {
 	DBPath           string
 	OutDir           string
 	RepoRoot         string
-	IncludeSource    bool
 	BuildSPA         bool
 	RenderReviewDocs bool
+	StrictDocs       bool
 }
 
 // Export writes a static sql.js application bundle to Options.OutDir.
@@ -40,18 +41,29 @@ func Export(ctx context.Context, opts Options) error {
 		opts.RepoRoot = "."
 	}
 
-	if opts.BuildSPA {
+	assets, embeddedAssets, err := spaAssetsFS()
+	if err != nil {
+		return fmt.Errorf("load SPA assets: %w", err)
+	}
+	if opts.BuildSPA && !embeddedAssets {
 		fmt.Fprintln(os.Stderr, "Building SPA...")
 		if err := buildSPA(ctx); err != nil {
 			return fmt.Errorf("build SPA: %w", err)
 		}
+		assets, embeddedAssets, err = spaAssetsFS()
+		if err != nil {
+			return fmt.Errorf("load SPA assets: %w", err)
+		}
 	}
 
 	fmt.Fprintln(os.Stderr, "Copying SPA assets...")
+	if embeddedAssets {
+		fmt.Fprintln(os.Stderr, "Using embedded SPA assets")
+	}
 	if err := os.MkdirAll(opts.OutDir, 0o755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
-	if err := copyTree("ui/dist/public", opts.OutDir); err != nil {
+	if err := copyFSTree(assets, ".", opts.OutDir); err != nil {
 		return fmt.Errorf("copy SPA build: %w", err)
 	}
 
@@ -63,17 +75,8 @@ func Export(ctx context.Context, opts Options) error {
 
 	if opts.RenderReviewDocs {
 		fmt.Fprintln(os.Stderr, "Rendering review docs into SQLite...")
-		if err := AddRenderedReviewDocs(ctx, dbOutPath, opts.RepoRoot); err != nil {
+		if err := AddRenderedReviewDocs(ctx, dbOutPath, opts.RepoRoot, opts.StrictDocs); err != nil {
 			return fmt.Errorf("render review docs: %w", err)
-		}
-	}
-
-	if opts.IncludeSource {
-		fmt.Fprintln(os.Stderr, "Copying source tree...")
-		sourceSrc := filepath.Join(opts.RepoRoot, "internal", "sourcefs", "embed", "source")
-		sourceDst := filepath.Join(opts.OutDir, "source")
-		if err := copyTree(sourceSrc, sourceDst); err != nil {
-			return fmt.Errorf("copy source tree: %w", err)
 		}
 	}
 
@@ -110,21 +113,27 @@ func buildManifest(ctx context.Context, opts Options, dbOutPath string) (*Manife
 	if err != nil {
 		return nil, err
 	}
+	schemaVersions, err := inspectSchemaVersions(ctx, dbOutPath)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Manifest{
 		SchemaVersion: 1,
 		Kind:          manifestKind,
 		GeneratedAt:   time.Now().UTC().Format(time.RFC3339),
 		DB: DBManifest{
-			Path:          "db/codebase.db",
-			SizeBytes:     info.Size(),
-			SchemaVersion: 1,
+			Path:                 "db/codebase.db",
+			SizeBytes:            info.Size(),
+			SchemaVersion:        1,
+			HistorySchemaVersion: schemaVersions["history_schema_version"],
+			ReviewSchemaVersion:  schemaVersions["review_schema_version"],
+			SchemaVersions:       schemaVersions,
 		},
 		Features: FeatureManifest{
 			CodebaseBrowser: true,
 			ReviewDocs:      commits.hasReviewDocs,
 			LLMDatabase:     true,
-			SourceTree:      opts.IncludeSource,
 		},
 		Repo: RepoManifest{
 			RootLabel: filepath.Base(absOrClean(opts.RepoRoot)),
@@ -160,14 +169,41 @@ func inspectCommits(ctx context.Context, dbPath string) (*commitInspection, erro
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM commits WHERE error = ''`).Scan(&out.count); err != nil {
 		return nil, fmt.Errorf("count commits: %w", err)
 	}
-	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY author_time ASC LIMIT 1`).Scan(&out.oldest)
-	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY author_time DESC LIMIT 1`).Scan(&out.newest)
+	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY sequence ASC, author_time ASC LIMIT 1`).Scan(&out.oldest)
+	_ = db.QueryRowContext(ctx, `SELECT hash FROM commits WHERE error = '' ORDER BY sequence DESC, author_time DESC LIMIT 1`).Scan(&out.newest)
 
 	var reviewCount int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM review_docs`).Scan(&reviewCount); err == nil {
 		out.hasReviewDocs = reviewCount > 0
 	}
 	return out, nil
+}
+
+func inspectSchemaVersions(ctx context.Context, dbPath string) (map[string]string, error) {
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open output DB for schema versions: %w", err)
+	}
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `SELECT key, value FROM schema_info ORDER BY key`)
+	if err != nil {
+		return nil, fmt.Errorf("query schema_info: %w", err)
+	}
+	defer rows.Close()
+
+	versions := map[string]string{}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, fmt.Errorf("scan schema_info: %w", err)
+		}
+		versions[key] = value
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("schema_info rows: %w", err)
+	}
+	return versions, nil
 }
 
 func writeManifest(outDir string, manifest *Manifest) error {
@@ -182,21 +218,42 @@ func writeManifest(outDir string, manifest *Manifest) error {
 	return nil
 }
 
-func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+func copyFSTree(srcFS fs.FS, root, dst string) error {
+	return fs.WalkDir(srcFS, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, path)
+		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
+		}
+		if rel == "." {
+			rel = ""
 		}
 		target := filepath.Join(dst, rel)
-		if info.IsDir() {
+		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
-		return copyFile(path, target)
+		return copyFSFile(srcFS, path, target)
 	})
+}
+
+func copyFSFile(srcFS fs.FS, src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := srcFS.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
 }
 
 func copyFile(src, dst string) error {

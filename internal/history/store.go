@@ -88,16 +88,28 @@ func (s *Store) HasCommit(ctx context.Context, hash string) (bool, error) {
 	return count > 0, nil
 }
 
+// MaxSequence returns the highest explicit commit sequence currently stored.
+func (s *Store) MaxSequence(ctx context.Context) (int, error) {
+	var max sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(sequence) FROM commits WHERE error = ''`).Scan(&max); err != nil {
+		return 0, err
+	}
+	if !max.Valid {
+		return 0, nil
+	}
+	return int(max.Int64), nil
+}
+
 // GetCommit retrieves a single commit by hash.
 func (s *Store) GetCommit(ctx context.Context, hash string) (*CommitRow, error) {
 	row := &CommitRow{}
 	err := s.db.QueryRowContext(ctx, `
 SELECT hash, short_hash, message, author_name, author_email,
-       author_time, indexed_at, branch, error
+       author_time, indexed_at, sequence, branch, error
 FROM   commits
 WHERE  hash = ?`, hash).Scan(
 		&row.Hash, &row.ShortHash, &row.Message, &row.AuthorName,
-		&row.AuthorEmail, &row.AuthorTime, &row.IndexedAt, &row.Branch, &row.Error,
+		&row.AuthorEmail, &row.AuthorTime, &row.IndexedAt, &row.Sequence, &row.Branch, &row.Error,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -108,13 +120,13 @@ WHERE  hash = ?`, hash).Scan(
 	return row, nil
 }
 
-// ListCommits returns all indexed commits ordered by author_time descending.
+// ListCommits returns all indexed commits ordered by explicit sequence descending.
 func (s *Store) ListCommits(ctx context.Context) ([]CommitRow, error) {
 	rows, err := s.db.QueryContext(ctx, `
 SELECT hash, short_hash, message, author_name, author_email,
-       author_time, indexed_at, branch, error
+       author_time, indexed_at, sequence, branch, error
 FROM   commits
-ORDER BY author_time DESC`)
+ORDER BY sequence DESC, author_time DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +136,7 @@ ORDER BY author_time DESC`)
 		var r CommitRow
 		if err := rows.Scan(
 			&r.Hash, &r.ShortHash, &r.Message, &r.AuthorName,
-			&r.AuthorEmail, &r.AuthorTime, &r.IndexedAt, &r.Branch, &r.Error,
+			&r.AuthorEmail, &r.AuthorTime, &r.IndexedAt, &r.Sequence, &r.Branch, &r.Error,
 		); err != nil {
 			return nil, err
 		}
@@ -152,6 +164,7 @@ type CommitRow struct {
 	AuthorEmail string
 	AuthorTime  int64
 	IndexedAt   int64
+	Sequence    int
 	Branch      string
 	Error       string
 }

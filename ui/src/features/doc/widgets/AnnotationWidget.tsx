@@ -1,5 +1,5 @@
 import React from 'react';
-import { getSqlJsProvider } from '../../../api/sqlJsQueryProvider';
+import { getSqlJsProvider } from '../../../api/sqlJsProviderRegistry';
 
 interface AnnotationWidgetProps {
   sym: string;

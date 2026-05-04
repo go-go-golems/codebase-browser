@@ -46,7 +46,7 @@ func fixtureLoaded(t *testing.T) (*browser.Loaded, fstest.MapFS) {
 
 func TestRender_Signature(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "# title\n\n```codebase-signature sym=example.com/foo.Hello\n```\n"
+	md := "# title\n\n```codebase-signature sym=sym:example.com/foo.func.Hello\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)
@@ -54,29 +54,50 @@ func TestRender_Signature(t *testing.T) {
 	if len(page.Errors) > 0 {
 		t.Fatalf("errors: %v", page.Errors)
 	}
-	if !strings.Contains(page.HTML, "func Hello(name string) string") {
-		t.Errorf("html missing signature: %s", page.HTML)
+	if strings.Contains(page.HTML, "data-codebase-snippet") {
+		t.Errorf("html still contains deprecated hydration stub: %s", page.HTML)
 	}
-	if len(page.Snippets) != 1 || page.Snippets[0].Kind != "signature" {
+	if !strings.Contains(page.HTML, "Resolved") {
+		t.Errorf("html missing inert resolution marker: %s", page.HTML)
+	}
+	if len(page.Snippets) != 1 || page.Snippets[0].Kind != "signature" || page.Snippets[0].Text != "func Hello(name string) string" {
 		t.Errorf("snippets=%+v", page.Snippets)
 	}
 }
 
 func TestRender_DocDirective(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "```codebase-doc sym=example.com/foo.Hello\n```\n"
+	md := "```codebase-doc sym=sym:example.com/foo.func.Hello\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(page.HTML, "Hello greets.") {
-		t.Errorf("html missing doc: %s", page.HTML)
+	if strings.Contains(page.HTML, "data-codebase-snippet") {
+		t.Errorf("html still contains deprecated hydration stub: %s", page.HTML)
+	}
+	if len(page.Snippets) != 1 || page.Snippets[0].Text != "Hello greets." {
+		t.Errorf("snippet missing doc text: %+v", page.Snippets)
+	}
+}
+
+func TestRender_RejectsShortSymbolRef(t *testing.T) {
+	l, srcFS := fixtureLoaded(t)
+	md := "```codebase-snippet sym=example.com/foo.Hello\n```\n"
+	page, err := Render("p", []byte(md), l, srcFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Errors) == 0 {
+		t.Fatal("expected error for non-sym reference")
+	}
+	if !strings.Contains(page.Errors[0], "must use a full sym: ID") {
+		t.Fatalf("unexpected errors: %v", page.Errors)
 	}
 }
 
 func TestRender_MissingSymbol_ReportsError(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "```codebase-snippet sym=example.com/foo.Nope\n```\n"
+	md := "```codebase-snippet sym=sym:example.com/foo.func.Nope\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)
@@ -95,10 +116,10 @@ func TestFirstH1(t *testing.T) {
 	}
 }
 
-func TestRender_EmitsHydrationStubs(t *testing.T) {
+func TestRender_DoesNotEmitHydrationStubs(t *testing.T) {
 	l, srcFS := fixtureLoaded(t)
-	md := "# t\n\n```codebase-snippet sym=example.com/foo.Hello\n```\n\n" +
-		"```codebase-signature sym=example.com/foo.Hello\n```\n"
+	md := "# t\n\n```codebase-snippet sym=sym:example.com/foo.func.Hello\n```\n\n" +
+		"```codebase-signature sym=sym:example.com/foo.func.Hello\n```\n"
 	page, err := Render("p", []byte(md), l, srcFS)
 	if err != nil {
 		t.Fatal(err)
@@ -109,24 +130,15 @@ func TestRender_EmitsHydrationStubs(t *testing.T) {
 	if len(page.Snippets) != 2 {
 		t.Fatalf("want 2 snippets, got %d", len(page.Snippets))
 	}
-	// Each snippet has a non-empty StubID matching a data-stub-id in the HTML.
 	for _, s := range page.Snippets {
 		if s.StubID == "" {
 			t.Errorf("snippet %s has no StubID", s.SymbolID)
 		}
-		if !strings.Contains(page.HTML, `data-stub-id="`+s.StubID+`"`) {
-			t.Errorf("html missing stub-id %q", s.StubID)
-		}
 	}
-	// Stub carries sym, directive, kind, lang.
-	if !strings.Contains(page.HTML, `data-directive="codebase-snippet"`) {
-		t.Errorf("html missing directive attr: %s", page.HTML)
+	if strings.Contains(page.HTML, `data-codebase-snippet`) || strings.Contains(page.HTML, `data-stub-id`) {
+		t.Errorf("html still contains deprecated hydration attributes: %s", page.HTML)
 	}
-	if !strings.Contains(page.HTML, `data-lang="go"`) {
-		t.Errorf("html missing lang attr: %s", page.HTML)
-	}
-	// Plaintext fallback still inside the stub (goldmark escapes angle brackets).
-	if !strings.Contains(page.HTML, "func Hello(name string) string") {
-		t.Errorf("html missing fallback signature: %s", page.HTML)
+	if !strings.Contains(page.HTML, "Resolved") {
+		t.Errorf("html missing inert resolution marker: %s", page.HTML)
 	}
 }

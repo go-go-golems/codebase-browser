@@ -18,9 +18,12 @@ export interface CommitWalkStep {
 interface CommitWalkWidgetProps {
   title?: string;
   stepsJSON?: string;
+  commit?: string;
+  from?: string;
+  to?: string;
 }
 
-export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWalkWidgetProps) {
+export function CommitWalkWidget({ title = 'Commit walk', stepsJSON, commit, from, to }: CommitWalkWidgetProps) {
   const steps = React.useMemo(() => parseSteps(stepsJSON), [stepsJSON]);
   const [index, setIndex] = React.useState(0);
   const current = steps[index];
@@ -83,23 +86,53 @@ export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWal
       <article style={{ display: 'grid', gap: 12 }}>
         <header>
           <h4 style={{ margin: '0 0 4px' }}>{current.title || defaultStepTitle(current)}</h4>
-          {current.body && <p style={{ margin: 0, color: 'var(--cb-color-muted)' }}>{current.body}</p>}
+          {current.body && !isBodyRenderedByStep(current.kind) && <p style={{ margin: 0, color: 'var(--cb-color-muted)' }}>{current.body}</p>}
         </header>
-        <CommitWalkStepView step={current} />
+        <CommitWalkStepView step={current} defaultCommit={commit} defaultFrom={from} defaultTo={to} />
       </article>
     </section>
   );
 }
 
-function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
-  const p = step.params ?? {};
+function isBodyRenderedByStep(kind: string): boolean {
+  return kind === 'overview' || kind === 'note';
+}
+
+function CommitWalkStepView({
+  step,
+  defaultCommit,
+  defaultFrom,
+  defaultTo,
+}: {
+  step: CommitWalkStep;
+  defaultCommit?: string;
+  defaultFrom?: string;
+  defaultTo?: string;
+}) {
+  const p = { ...(step.params ?? {}) };
+  if (defaultCommit && !p.commit) p.commit = defaultCommit;
+  if (defaultFrom && !p.from) p.from = defaultFrom;
+  if (defaultTo && !p.to) p.to = defaultTo;
   switch (step.kind) {
+    case 'overview':
+    case 'note':
+      return step.body ? <p style={{ margin: 0 }}>{step.body}</p> : <div data-part="empty">No note body.</div>;
     case 'diff-stats':
     case 'stats':
       return <DiffStatsWidget from={p.from ?? ''} to={p.to ?? ''} />;
     case 'changed-files':
     case 'files':
       return <ChangedFilesWidget from={p.from ?? ''} to={p.to ?? ''} />;
+    case 'symbol':
+      return (
+        <AnnotationWidget
+          sym={step.symbolId ?? ''}
+          language={step.language}
+          commit={p.commit}
+          lines={p.lines}
+          note={p.note}
+        />
+      );
     case 'diff':
       return <SymbolDiffInlineWidget sym={step.symbolId ?? ''} from={p.from ?? ''} to={p.to ?? ''} />;
     case 'history': {
@@ -138,8 +171,11 @@ function parseSteps(raw?: string): CommitWalkStep[] {
 }
 
 function defaultStepTitle(step: CommitWalkStep): string {
+  if (step.kind === 'overview') return 'Overview';
+  if (step.kind === 'note') return 'Note';
   if (step.kind === 'stats' || step.kind === 'diff-stats') return 'Review the size of the change';
   if (step.kind === 'files' || step.kind === 'changed-files') return 'Review changed files';
+  if (step.kind === 'symbol') return 'Review symbol';
   if (step.kind === 'diff') return 'Review the symbol diff';
   if (step.kind === 'history') return 'Review symbol history';
   if (step.kind === 'impact') return 'Review impact';

@@ -50,11 +50,12 @@ embedded review guides.
 
 Prerequisites: Go 1.22+ and optional Docker for the hermetic Dagger build path. Node 22+ and pnpm 10.x are needed when building the static browser frontend.
 
-````bash
+```bash
 # 1) Optional: install UI deps
 pnpm -C ui install
 
-# 2) Build the CLI
+# 2) Build the standalone CLI
+#    This builds the React UI, embeds the static assets, and compiles with -tags embed.
 make build
 
 # 3) Write a review guide with embedded widgets
@@ -64,14 +65,22 @@ cat > ./reviews/pr-42.md << 'EOF'
 
 ## Changes
 
-```codebase-diff sym=staticapp.Export from=HEAD~1 to=HEAD
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract
+```
+
+### Diff
+
+```codebase-diff sym=sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract from=HEAD~1 to=HEAD
 ```
 EOF
 
 # 4) Index commits and review docs into SQLite
+#    NOTE: --patterns defaults to ./cmd/...,./internal/...
+#    Use --patterns ./... to index all Go packages
 ./bin/codebase-browser review index \
   --commits HEAD~10..HEAD \
   --docs ./reviews/pr-42.md \
+  --parallelism 4 \
   --db /tmp/pr-42.db
 
 # 5) Export a static browser bundle
@@ -82,7 +91,7 @@ EOF
 # 6) Serve with any static file server
 python3 -m http.server 8784 --directory /tmp/pr-42-static
 # open http://localhost:8784/#/
-````
+```
 
 The exported browser loads `manifest.json`, opens `db/codebase.db` with sql.js, and answers code navigation questions locally. There is no Go runtime server and no `/api/*` requests.
 
@@ -115,8 +124,11 @@ For documentation on writing review guides, run:
 
 Drop a markdown file under `internal/docs/embed/pages/`. Any fenced block with an info string of `codebase-snippet`, `codebase-signature`, or `codebase-doc` is replaced at render time with the named symbol's body, signature, or godoc.
 
-Short refs work for unambiguous cases: `github.com/.../indexer.Merge`.
-Use full `sym:` IDs when a name collides across files in the same package.
+**Always use full `sym:` IDs** (e.g. `sym:github.com/.../indexer.func.Extract`). Short refs like `indexer.Extract` are intentionally unsupported because they are ambiguous across packages. Query the review database to discover symbol IDs:
+
+```sql
+sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols ORDER BY 1;"
+```
 
 ## Repo layout
 

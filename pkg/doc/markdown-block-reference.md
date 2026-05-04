@@ -55,17 +55,15 @@ sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 sym:github.com/wesen/codebase-browser/internal/indexer.method.Store.LoadSnapshot
 ```
 
-### Short symbol references
+### No short symbol references
 
-Short refs omit the `sym:` prefix and import path prefix. The resolver finds the symbol by matching the name against the indexed package:
+Short refs such as `staticapp.Export` or `indexer.Extract` are intentionally not supported. They are ambiguous across packages and can look correct while pointing at no indexed symbol.
 
-```text
-staticapp.Export          → top-level function in github.com/.../staticapp
-indexer.Extract           → top-level function in github.com/.../indexer
-indexer.Store.LoadSnapshot → method on Store type in github.com/.../indexer
+Use the full `sym:` ID in every review markdown directive. Discover IDs with:
+
+```sql
+sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols ORDER BY 1;"
 ```
-
-Short refs fail if ambiguous (two symbols with the same name in the same package). Use the full ID in that case.
 
 ### Commit parameters
 
@@ -82,11 +80,11 @@ The `commit=` parameter on a directive shows the symbol at a specific commit:
 
 ````markdown
 Before this change:
-```codebase-snippet sym=staticapp.Export commit=HEAD~3
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export commit=HEAD~3
 ```
 
 After this change:
-```codebase-snippet sym=staticapp.Export
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 ```
 ````
 
@@ -105,7 +103,7 @@ Embeds the full body of a symbol (the declaration plus its implementation body).
 **Example:**
 
 ````markdown
-```codebase-snippet sym=staticapp.Export
+```codebase-snippet sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 ```
 ````
 
@@ -123,7 +121,7 @@ Embeds only the signature line of a symbol — the function signature without th
 **Example:**
 
 ````markdown
-```codebase-signature sym=staticapp.Export
+```codebase-signature sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 ```
 ````
 
@@ -145,7 +143,7 @@ Embeds the godoc or TSDoc comment on a symbol.
 **Example:**
 
 ````markdown
-```codebase-doc sym=staticapp.Export
+```codebase-doc sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 ```
 ````
 
@@ -182,7 +180,7 @@ Shows a semantic diff of a symbol's body between two commits. Uses word-level hi
 **Example:**
 
 ````markdown
-```codebase-diff sym=staticapp.Export from=HEAD~1 to=HEAD
+```codebase-diff sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export from=HEAD~1 to=HEAD
 ```
 ````
 
@@ -202,7 +200,7 @@ Shows a timeline of every commit that touched a symbol, with commit metadata and
 **Example:**
 
 ````markdown
-```codebase-symbol-history sym=staticapp.Export limit=8
+```codebase-symbol-history sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export limit=8
 ```
 ````
 
@@ -220,17 +218,17 @@ Shows a transitive caller/callee graph around a symbol. Callers are functions th
 - `depth=<N>` — traversal depth (default: 1)
 - `commit=<ref>` — show impact at a specific commit
 
-**Example — who calls `staticapp.Export`?**
+**Example — who calls `sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export`?**
 
 ````markdown
-```codebase-impact sym=staticapp.Export dir=usedby depth=2
+```codebase-impact sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export dir=usedby depth=2
 ```
 ````
 
-**Example — what does `staticapp.Export` call?**
+**Example — what does `sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export` call?**
 
 ````markdown
-```codebase-impact sym=staticapp.Export dir=uses depth=1
+```codebase-impact sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export dir=uses depth=1
 ```
 ````
 
@@ -274,9 +272,9 @@ step kind=<kind> [title=<text>] [sym=<symbol-ref>] [body=<text>] [<extra-params>
 ```codebase-commit-walk from=HEAD~4 to=HEAD
 step kind=overview title="Review scope" body="This PR touches the export pipeline."
 step kind=diff-stats title="Change summary"
-step kind=symbol sym=staticapp.Export title="Inspect the Export function"
-step kind=diff sym=staticapp.Export from=HEAD~4 to=HEAD title="Diff across the PR"
-step kind=impact sym=staticapp.Export dir=usedby depth=2 title="Callers"
+step kind=symbol sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export title="Inspect the Export function"
+step kind=diff sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export from=HEAD~4 to=HEAD title="Diff across the PR"
+step kind=impact sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export dir=usedby depth=2 title="Callers"
 step kind=note title="Key observation" body="The new Options field is set in the CLI but never read in Export."
 ```
 ````
@@ -297,7 +295,7 @@ Overlays inline highlights and notes on a symbol's source code. Useful for point
 **Example:**
 
 ````markdown
-```codebase-annotation sym=staticapp.Export lines=20-35 note="This is the new error path added in this PR"
+```codebase-annotation sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export lines=20-35 note="This is the new error path added in this PR"
 ```
 ````
 
@@ -380,6 +378,8 @@ sym:github.com/wesen/codebase-browser/internal/indexer.type.Matcher
 |---------|-------|----------|
 | Widget shows "doc error: symbol not found" | Symbol not in indexed commit range | Use `sym:` ID (not short ref) and confirm the symbol exists in `--commits` range |
 | Widget shows "doc error: ambiguous" | Short ref matches multiple symbols | Use full `sym:` ID |
+| **Directive produces no snippet (silently skipped)** | Short ref doesn't match any package import path | Use full `sym:` IDs; query DB: `SELECT DISTINCT stable_id FROM symbols` |
+| **Fewer packages than expected** | Default `--patterns` only covers `./cmd/...` and `./internal/...` | Pass `--patterns` explicitly: `--patterns ./...,./pkg/...` |
 | Diff widget shows no changes | `from` and `to` commits have same body hash for this symbol | Use `codebase-symbol-history` to find which commits actually changed the symbol |
 | File widget shows "doc error: file not in index" | File path is wrong or file was renamed | Use the correct relative path from the repo root |
 | Commit-walk shows "doc error: expected step" | DSL body has a malformed step line | Each step line must start with `step kind=...` and have `kind=` as the first parameter |

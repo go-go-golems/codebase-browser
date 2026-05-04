@@ -5,11 +5,36 @@ type Database = initSqlJs.Database;
 
 export type SqlRow = Record<string, SqlValue>;
 
+const slowQueryThresholdMs = 1000;
+
+function isSqlDebugEnabled(): boolean {
+  const location = globalThis.location;
+  return !!location && new URLSearchParams(location.search).has('debugSql');
+}
+
+function compactSql(sql: string): string {
+  return sql.replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+
+function compactParams(params: SqlValue[]): SqlValue[] {
+  return params.map((param) => {
+    if (param instanceof Uint8Array) return `<blob:${param.byteLength}>`;
+    return param;
+  });
+}
+
 export function queryAll<T extends SqlRow = SqlRow>(
   db: Database,
   sql: string,
   params: SqlValue[] = [],
 ): T[] {
+  const debug = isSqlDebugEnabled();
+  const started = performance.now();
+  const sqlPreview = debug ? compactSql(sql) : '';
+  if (debug) {
+    console.warn('[sql.js:start]', { sql: sqlPreview, params: compactParams(params) });
+  }
+
   const stmt = db.prepare(sql);
   try {
     stmt.bind(params);
@@ -17,7 +42,24 @@ export function queryAll<T extends SqlRow = SqlRow>(
     while (stmt.step()) {
       rows.push(stmt.getAsObject() as T);
     }
+    const elapsedMs = performance.now() - started;
+    if (debug || elapsedMs >= slowQueryThresholdMs) {
+      console.warn('[sql.js:done]', {
+        elapsedMs: Math.round(elapsedMs),
+        rows: rows.length,
+        sql: sqlPreview || compactSql(sql),
+        params: debug ? compactParams(params) : undefined,
+      });
+    }
     return rows;
+  } catch (error) {
+    console.error('[sql.js:error]', {
+      elapsedMs: Math.round(performance.now() - started),
+      sql: sqlPreview || compactSql(sql),
+      params: compactParams(params),
+      error,
+    });
+    throw error;
   } finally {
     stmt.free();
   }

@@ -15,16 +15,18 @@ type Manifest struct {
 }
 
 type DBManifest struct {
-	Path          string `json:"path"`
-	SizeBytes     int64  `json:"sizeBytes"`
-	SchemaVersion int    `json:"schemaVersion"`
+	Path                  string            `json:"path"`
+	SizeBytes             int64             `json:"sizeBytes"`
+	SchemaVersion         int               `json:"schemaVersion"`
+	HistorySchemaVersion  string            `json:"historySchemaVersion,omitempty"`
+	ReviewSchemaVersion   string            `json:"reviewSchemaVersion,omitempty"`
+	SchemaVersions        map[string]string `json:"schemaVersions,omitempty"`
 }
 
 type FeatureManifest struct {
 	CodebaseBrowser bool `json:"codebaseBrowser"`
 	ReviewDocs      bool `json:"reviewDocs"`
 	LLMDatabase     bool `json:"llmDatabase"`
-	SourceTree      bool `json:"sourceTree"`
 }
 
 type RepoManifest struct {
