@@ -31,8 +31,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: ui/pnpm-lock.yaml
       - name: Install arm64 cross-compiler
         run: |
           sudo apt-get update
@@ -69,8 +67,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: pnpm
-          cache-dependency-path: ui/pnpm-lock.yaml
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser-pro
