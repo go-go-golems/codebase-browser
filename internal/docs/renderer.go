@@ -293,6 +293,9 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 		if to := params["to"]; to != "" {
 			ref.Params["to"] = to
 		}
+		if commit := params["commit"]; commit != "" {
+			ref.Params["commit"] = commit
+		}
 		if title := params["title"]; title != "" {
 			ref.Params["title"] = title
 		}

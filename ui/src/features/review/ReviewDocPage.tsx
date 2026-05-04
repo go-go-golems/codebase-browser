@@ -60,18 +60,30 @@ function MarkdownBlock({ block }: { block: ReviewPageBlock }) {
 function ReviewWidgetBlock({ block, snippet }: { block: ReviewPageBlock; snippet?: SnippetRef }) {
   const props = block.props ?? {};
   const directive = block.directive ?? snippet?.directive ?? '';
-  const sym = snippet?.symbolId ?? props.sym ?? '';
-  const params = { ...props, ...(snippet?.params ?? {}) };
+  if (!snippet) {
+    return (
+      <div className="codebase-snippet" data-directive={directive} data-widget-id={block.id} data-part="error">
+        <strong>Review widget could not be resolved.</strong>
+        <div>
+          {block.line ? `line ${block.line}: ` : ''}
+          <code>{directive || 'unknown directive'}</code>
+          {block.id ? ` (${block.id})` : ''} has no matching resolved snippet in the review database.
+        </div>
+      </div>
+    );
+  }
+  const sym = snippet.symbolId ?? props.sym ?? '';
+  const params = { ...props, ...(snippet.params ?? {}) };
   return (
     <div className="codebase-snippet" data-directive={directive} data-widget-id={block.id}>
       <DocSnippet
         sym={sym}
         directive={directive}
-        kind={snippet?.kind ?? props.kind ?? ''}
-        lang={snippet?.language ?? 'go'}
-        commit={snippet?.commitHash ?? props.commit}
+        kind={snippet.kind ?? props.kind ?? ''}
+        lang={snippet.language ?? 'go'}
+        commit={snippet.commitHash ?? props.commit}
         params={params}
-        text={snippet?.text}
+        text={snippet.text}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wesen/codebase-browser/internal/history"
@@ -62,17 +63,96 @@ func OpenOrCreate(path string) (*Store, error) {
 			_ = store.Close()
 			return nil, err
 		}
+		return store, nil
+	}
+	if err := store.ValidateSchemaCompatibility(context.Background()); err != nil {
+		_ = store.Close()
+		return nil, err
 	}
 	return store, nil
 }
 
+// ValidateSchemaCompatibility checks that an existing DB is safe to reuse for
+// incremental indexing. Older review databases may have a commits table but not
+// the normalized schema (sequence/schema_info/mapping tables) that incremental
+// indexing and static exports now require.
+func (s *Store) ValidateSchemaCompatibility(ctx context.Context) error {
+	var problems []string
+	for key, want := range map[string]string{
+		"history_schema_version": "3",
+		"review_schema_version":  "2",
+	} {
+		var got string
+		if err := s.db.QueryRowContext(ctx, `SELECT value FROM schema_info WHERE key = ?`, key).Scan(&got); err != nil {
+			problems = append(problems, fmt.Sprintf("missing schema_info[%s]", key))
+		} else if got != want {
+			problems = append(problems, fmt.Sprintf("schema_info[%s] = %q, want %q", key, got, want))
+		}
+	}
+	for _, table := range []string{
+		"commits", "packages", "files", "symbols", "ref_versions", "file_contents",
+		"commit_packages", "commit_files", "commit_symbols", "commit_refs",
+		"review_docs", "review_doc_snippets",
+	} {
+		if !s.hasTable(ctx, table) {
+			problems = append(problems, "missing table "+table)
+		}
+	}
+	for table, columns := range map[string][]string{
+		"commits":             {"sequence"},
+		"symbols":             {"file_id", "start_offset", "end_offset", "body_hash"},
+		"ref_versions":        {"locations_json"},
+		"review_doc_snippets": {"stub_id", "params_json", "commit_hash"},
+	} {
+		for _, column := range columns {
+			if !s.hasColumn(ctx, table, column) {
+				problems = append(problems, fmt.Sprintf("missing column %s.%s", table, column))
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("existing review database schema is incompatible with incremental indexing; recreate the database without --incremental (problems: %s)", strings.Join(problems, "; "))
+	}
+	return nil
+}
+
 // HasTables returns true if the database contains the expected tables.
 func (s *Store) HasTables() bool {
+	return s.hasTable(context.Background(), "commits")
+}
+
+func (s *Store) hasTable(ctx context.Context, name string) bool {
 	var count int
-	err := s.db.QueryRow(`
+	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM sqlite_master
-		WHERE type='table' AND name='commits'`).Scan(&count)
+		WHERE type='table' AND name = ?`, name).Scan(&count)
 	return err == nil && count > 0
+}
+
+func (s *Store) hasColumn(ctx context.Context, table, column string) bool {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(`+quoteSQLiteIdent(table)+`)`)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return false
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
+}
+
+func quoteSQLiteIdent(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
 // HasCommits returns true if the database contains at least one indexed commit.

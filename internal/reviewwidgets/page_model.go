@@ -85,10 +85,14 @@ func BuildPage(slug string, mdSource []byte) (*Page, error) {
 		if j <= len(lines) {
 			bodyLines = lines[i+1 : j]
 		}
-		block, diagnostics := buildWidgetBlock(widgetCounter+1, i+1, info, bodyLines)
+		// Keep these IDs aligned with docs.Render/preprocess: every codebase-*
+		// directive fence consumes a stub number, even when validation fails and no
+		// SnippetRef row is emitted. Otherwise a later valid widget would look for
+		// the wrong stub-N snippet at runtime after an earlier invalid directive.
+		widgetCounter++
+		block, diagnostics := buildWidgetBlock(widgetCounter, i+1, info, bodyLines)
 		page.Diagnostics = append(page.Diagnostics, diagnostics...)
 		if block != nil {
-			widgetCounter++
 			page.Blocks = append(page.Blocks, *block)
 		}
 		if j < len(lines) {

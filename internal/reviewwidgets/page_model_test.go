@@ -41,6 +41,33 @@ Outro prose.
 	}
 }
 
+func TestBuildPageKeepsStubIDsAlignedAfterInvalidDirective(t *testing.T) {
+	page, err := BuildPage("mixed", []byte(`# Mixed
+
+`+"```codebase-diff-stats from=HEAD~1\n```"+`
+
+`+"```codebase-changed-files from=HEAD~1 to=HEAD\n```"+`
+`))
+	if err != nil {
+		t.Fatalf("BuildPage() error = %v", err)
+	}
+	if len(page.Diagnostics) != 1 {
+		t.Fatalf("Diagnostics = %#v, want one", page.Diagnostics)
+	}
+	var widgets []Block
+	for _, block := range page.Blocks {
+		if block.Type == "widget" {
+			widgets = append(widgets, block)
+		}
+	}
+	if len(widgets) != 1 {
+		t.Fatalf("widgets = %#v, want one valid widget", widgets)
+	}
+	if widgets[0].ID != "stub-2" {
+		t.Fatalf("valid widget ID = %q, want stub-2 after invalid first directive", widgets[0].ID)
+	}
+}
+
 func TestBuildPageReportsDirectiveDiagnostics(t *testing.T) {
 	page, err := BuildPage("bad", []byte(`# Bad
 

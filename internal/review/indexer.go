@@ -108,7 +108,11 @@ func IndexReview(ctx context.Context, store *Store, opts IndexOptions) (*IndexRe
 			fmt.Fprintf(os.Stderr, "Indexing %d new commits (skipping %d existing)\n", len(toIndex), skipped)
 		}
 
-		useWorktrees := len(toIndex) > 1
+		// Decide from the originally requested range, not the filtered incremental
+		// batch. If --incremental filters a multi-commit range down to one missing
+		// commit, that remaining commit may not be the current checkout; direct
+		// filesystem extraction would index the wrong revision under that hash.
+		useWorktrees := len(commits) > 1
 		histOpts := history.IndexOptions{
 			RepoRoot:     opts.RepoRoot,
 			Commits:      toIndex,

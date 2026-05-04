@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -78,6 +79,42 @@ func TestResetSchema(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("expected 0 review docs after reset, got %d", count)
+	}
+}
+
+func TestOpenOrCreateInitializesEmptyDatabase(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "new.db")
+	store, err := OpenOrCreate(dbPath)
+	if err != nil {
+		t.Fatalf("OpenOrCreate empty DB: %v", err)
+	}
+	defer store.Close()
+	if err := store.ValidateSchemaCompatibility(ctx); err != nil {
+		t.Fatalf("new DB schema should be compatible: %v", err)
+	}
+}
+
+func TestOpenOrCreateRejectsLegacyCommitsTable(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy.db")
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	if _, err := store.DB().ExecContext(context.Background(), `CREATE TABLE commits (hash TEXT PRIMARY KEY)`); err != nil {
+		t.Fatalf("create legacy commits table: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	store, err = OpenOrCreate(dbPath)
+	if err == nil {
+		_ = store.Close()
+		t.Fatal("OpenOrCreate should reject incompatible legacy schema")
+	}
+	if !strings.Contains(err.Error(), "schema is incompatible") || !strings.Contains(err.Error(), "schema_info") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

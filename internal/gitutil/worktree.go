@@ -17,6 +17,7 @@ func CreateWorktree(ctx context.Context, repoRoot, commitHash string) (string, e
 
 	cmd := exec.CommandContext(ctx, "git", "worktree", "add", "--detach", tmpDir, commitHash)
 	cmd.Dir = repoRoot
+	cmd.Env = cleanGitEnv()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git worktree add %s: %w\n%s", commitHash, err, out)
 	}
@@ -27,6 +28,7 @@ func CreateWorktree(ctx context.Context, repoRoot, commitHash string) (string, e
 func RemoveWorktree(ctx context.Context, repoRoot, worktreeDir string) error {
 	cmd := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", worktreeDir)
 	cmd.Dir = repoRoot
+	cmd.Env = cleanGitEnv()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree remove %s: %w\n%s", worktreeDir, err, out)
 	}

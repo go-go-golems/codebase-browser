@@ -32,37 +32,49 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+
       - name: Run tests
         run: go test ./...
 
       - name: Build embedded binary
         run: make build
 
-      - name: Build demo history database
+      - name: Build demo review database and static export
         run: |
-          rm -f bin/history.db bin/history.db-shm bin/history.db-wal
-          ./bin/codebase-browser history scan \
-            --db bin/history.db \
-            --range "c9132579687ca9b334ff81f9161ba058bffc52c4^..HEAD" \
-            --worktrees
+          rm -rf bin/static bin/review.db bin/review.db-shm bin/review.db-wal
+          ./bin/codebase-browser review index \
+            --db bin/review.db \
+            --repo-root . \
+            --commits "HEAD~2..HEAD" \
+            --docs examples/all-widgets-smoke.md \
+            --strict-docs
+          ./bin/codebase-browser review export \
+            --db bin/review.db \
+            --out bin/static \
+            --repo-root . \
+            --strict-docs
 
-      - name: Smoke test embedded binary assets and history API
+      - name: Smoke test static review export
         run: |
-          ./bin/codebase-browser serve --addr :8080 --history-db bin/history.db --repo-root . &
+          python3 -m http.server 8080 --directory bin/static &
           pid=$!
           trap 'kill $pid || true' EXIT
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8080/api/index >/dev/null; then
+            if curl -fsS http://127.0.0.1:8080/manifest.json >/dev/null; then
               break
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8080/api/index >/dev/null
-          curl -fsS http://127.0.0.1:8080/wasm_exec.js >/dev/null
-          curl -fsS http://127.0.0.1:8080/search.wasm >/dev/null
-          curl -fsS http://127.0.0.1:8080/precomputed.json >/dev/null
-          curl -fsS http://127.0.0.1:8080/ | grep -q '/wasm_exec.js'
-          curl -fsS 'http://127.0.0.1:8080/api/history/symbol-body-diff?from=c9132579687ca9b334ff81f9161ba058bffc52c4&to=e457069b75f87ddc0a07a58d5608e96334a7fcf0&symbol=sym%3Agithub.com%2Fwesen%2Fcodebase-browser%2Finternal%2Fserver.method.Server.handleSnippet' >/dev/null
+          curl -fsS http://127.0.0.1:8080/ | grep -q 'Codebase Browser'
+          curl -fsS http://127.0.0.1:8080/manifest.json | grep -q 'codebase-browser-sqljs-static-export'
+          curl -fsS http://127.0.0.1:8080/db/codebase.db >/dev/null
+          curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
 
       - name: Define image metadata
         run: |
@@ -113,18 +125,15 @@ jobs:
           docker run -d --rm --name codebase-browser-ci -p 127.0.0.1:8080:8080 "${GHCR_IMAGE}:${SHORT_SHA}"
           trap 'docker logs codebase-browser-ci || true; docker rm -f codebase-browser-ci || true' EXIT
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8080/api/index >/dev/null; then
+            if curl -fsS http://127.0.0.1:8080/manifest.json >/dev/null; then
               break
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8080/api/index >/dev/null
-          curl -fsS http://127.0.0.1:8080/wasm_exec.js >/dev/null
-          curl -fsS http://127.0.0.1:8080/search.wasm >/dev/null
-          curl -fsS http://127.0.0.1:8080/precomputed.json >/dev/null
-          curl -fsS http://127.0.0.1:8080/ | grep -q '/wasm_exec.js'
-          curl -fsS 'http://127.0.0.1:8080/api/history/symbol-body-diff?from=c9132579687ca9b334ff81f9161ba058bffc52c4&to=e457069b75f87ddc0a07a58d5608e96334a7fcf0&symbol=sym%3Agithub.com%2Fwesen%2Fcodebase-browser%2Finternal%2Fserver.method.Server.handleSnippet' >/dev/null
-          curl -fsS http://127.0.0.1:8080/doc/03-meta >/dev/null
+          curl -fsS http://127.0.0.1:8080/ | grep -q 'Codebase Browser'
+          curl -fsS http://127.0.0.1:8080/manifest.json | grep -q 'codebase-browser-sqljs-static-export'
+          curl -fsS http://127.0.0.1:8080/db/codebase.db >/dev/null
+          curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
 
   gitops-pr:
     name: Open GitOps PR
