@@ -1449,3 +1449,60 @@ The merge also pulled in newer mainline review/indexing work, including structur
 - Canonical demo range remained `025e4c6..79af1b0`.
 - The successful `make demo-solid` run reported `118 commits`, `5 docs`, `24 snippets`, and `0 rendered review errors`.
 - The successful `make demo-smoke` run reported `118 commits`, `117 main history rows`, and `0 rendered review errors`.
+
+## Step 17: Fix CI smoke wait after first PR rerun
+
+The first pushed merge resolution made unit, lint, and secret scanning pass, but the Docker workflow failed in the live-export smoke step. The server started successfully, but the first health probe raced the process startup and the GitHub Actions shell exited before the loop could observe the later healthy server.
+
+I made the workflow wait explicit and side-effect free under `bash -e`: it now records a `ready` flag, suppresses the transient curl failure output, asserts readiness after the loop, and checks the root page by successful HTTP fetch rather than by a brittle title grep.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 16)
+
+**Assistant interpretation:** Continue polishing the PR after pushing merge-resolution work, and keep diary/commit history current.
+
+**Inferred user intent:** Do not leave the PR with a known failing CI job after resolving the merge conflicts.
+
+**Commit (code):** 45ad2e25a4acad23eeba7a7ff04873552cc7ef17 — "ci: make live server smoke wait robust"
+
+### What I did
+- Inspected the failed `publish-image` workflow with `gh run view 28756127781 --log-failed` and the full failed log tail.
+- Updated both live smoke sections in `.github/workflows/publish-image.yaml` to use an explicit `ready=0`/`test "$ready" = "1"` wait loop.
+- Replaced `curl ... | grep -q 'Codebase Browser'` with `curl ... >/dev/null` so the smoke test validates serving the SPA without depending on a literal title string.
+- Committed and pushed the CI fix to `gcb-017-no-sqljs-live-demo`.
+
+### Why
+- The failure was in CI orchestration, not in the application runtime: the log showed `codebase-browser live server listening addr=:8080` immediately after the first failed curl.
+- The Docker workflow is the PR reviewer's P1 concern, so leaving it red would make the branch look functionally unresolved.
+
+### What worked
+- The failing workflow log was specific enough to identify the race:
+  - `curl: (7) Failed to connect to 127.0.0.1 port 8080 after 0 ms: Couldn't connect to server`
+  - `INF codebase-browser live server listening addr=:8080 db=bin/static/db/codebase.db static_dir=bin/static`
+- The fix is localized to `.github/workflows/publish-image.yaml` and applies to both host-process and loaded-image smoke tests.
+
+### What didn't work
+- The original loop looked like it should tolerate startup delay, but under the GitHub Actions `bash -e` wrapper the first failed curl still caused the step to exit before the health retry succeeded.
+
+### What I learned
+- CI smoke loops should avoid relying on shell-errexit exceptions inside `if` tests. Capturing readiness explicitly is clearer and more robust.
+- The root-page smoke should not assert on a UI title string when the real contract being tested is that the server can serve the SPA and API.
+
+### What was tricky to build
+- The confusing part was that the log showed the server starting successfully, so the application looked healthy even though the step failed. The underlying issue was shell control-flow behavior around a transient probe failure, not an API or Docker packaging issue.
+
+### What warrants a second pair of eyes
+- Review whether the workflow should print the server log on host-process smoke failures, similar to the Docker-container smoke trap.
+- Review whether the smoke test should add a real `/api/review-docs` JSON shape assertion instead of only checking that the endpoint returns successfully.
+
+### What should be done in the future
+- Wait for the latest `publish-image` run to complete and verify the Docker job turns green.
+
+### Code review instructions
+- Review `.github/workflows/publish-image.yaml`, especially the two `ready=0` loops in the live export and loaded image smoke steps.
+- Validate by checking the latest PR checks for `docker`, `test`, `lint`, and `TruffleHog Secret Scan`.
+
+### Technical details
+- Failed workflow: `publish-image` run `28756127781`.
+- Fix commit: `45ad2e25a4acad23eeba7a7ff04873552cc7ef17`.
