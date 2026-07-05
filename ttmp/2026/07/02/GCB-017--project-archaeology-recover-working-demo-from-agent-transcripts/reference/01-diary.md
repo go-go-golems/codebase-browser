@@ -1506,3 +1506,55 @@ I made the workflow wait explicit and side-effect free under `bash -e`: it now r
 ### Technical details
 - Failed workflow: `publish-image` run `28756127781`.
 - Fix commit: `45ad2e25a4acad23eeba7a7ff04873552cc7ef17`.
+
+## Step 18: Move sql-wasm CI assertion from HTTP fallback to artifact inspection
+
+The next CI run still failed in the Docker workflow, but for a different reason. The live server intentionally serves the SPA for unknown browser routes, so checking `/sql-wasm.wasm` over HTTP is not a reliable proof that the file exists or does not exist.
+
+I changed the host export smoke to inspect `bin/static` on disk for `sql-wasm*.wasm` artifacts before Docker build, and removed the loaded-container HTTP negative checks. The runtime server smoke still checks the SPA, `/api/health`, and `/api/review-docs`; the no-wasm assertion now targets the exported artifact where the file-system truth is available.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 16)
+
+**Assistant interpretation:** Continue fixing PR CI failures while preserving the no-sql.js runtime contract and diary trail.
+
+**Inferred user intent:** Make the PR checks green without weakening the actual artifact guarantee.
+
+**Commit (code):** 3d3608e9a856f05f80dca3fcd375e73d871fc945 — "ci: check sql wasm artifacts on disk"
+
+### What I did
+- Inspected the second failed `publish-image` run with `gh run view --log-failed`.
+- Replaced HTTP negative checks for `/sql-wasm.wasm` and `/sql-wasm-browser.wasm` with `find bin/static -name 'sql-wasm*.wasm'` in the host export smoke.
+- Removed the same HTTP negative checks from the loaded-image smoke because the distroless image is not convenient for shell-based file inspection and the exported artifact is already checked before Docker build.
+- Committed and pushed the workflow adjustment.
+
+### Why
+- SPA fallback can make a missing asset URL return a redirect or index page, so HTTP status is the wrong assertion for absence of static files.
+- The meaningful packaging assertion is that the exported `bin/static` tree contains no `sql-wasm*.wasm` file before it is copied into the Docker image.
+
+### What worked
+- The failure log showed the server came up; this narrowed the issue to the smoke assertion rather than build/export/runtime startup.
+- The replacement check is simple and matches the local `docs-smoke`/`Makefile` artifact check.
+
+### What didn't work
+- HTTP negative checks were brittle because the live server is an SPA server, not a strict 404-only static file server.
+
+### What I learned
+- For SPA-backed servers, absence-of-file assertions should inspect build artifacts, not route responses.
+
+### What was tricky to build
+- The original no-wasm check was conceptually correct but placed at the wrong abstraction layer. The route layer rewrites unknown paths; the artifact layer does not.
+
+### What warrants a second pair of eyes
+- Review whether a future Docker-image inspection step should be added with a non-distroless debug target or SBOM-style artifact listing.
+
+### What should be done in the future
+- Wait for the new `publish-image` run and confirm Docker turns green.
+
+### Code review instructions
+- Review `.github/workflows/publish-image.yaml` around the host export smoke and loaded-image smoke.
+- Confirm the host smoke checks `bin/static` for `sql-wasm*.wasm` and the loaded-image smoke still verifies live API behavior.
+
+### Technical details
+- Fix commit: `3d3608e9a856f05f80dca3fcd375e73d871fc945`.
