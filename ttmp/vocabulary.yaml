@@ -103,6 +103,10 @@ topics:
       description: Reconstructing project history and decisions from prior artifacts
     - slug: demo-recovery
       description: Recovering or validating a working project demo path
+    - slug: frontend-runtime
+      description: Frontend runtime architecture and browser data execution model
+    - slug: live-go-api
+      description: Live Go HTTP API used by browser UI
 docTypes:
     - slug: index
       description: Ticket index document
