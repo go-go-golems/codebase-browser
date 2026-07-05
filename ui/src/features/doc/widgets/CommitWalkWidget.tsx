@@ -83,17 +83,40 @@ export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWal
       <article style={{ display: 'grid', gap: 12 }}>
         <header>
           <h4 style={{ margin: '0 0 4px' }}>{current.title || defaultStepTitle(current)}</h4>
-          {current.body && <p style={{ margin: 0, color: 'var(--cb-color-muted)' }}>{current.body}</p>}
         </header>
+        {current.body && <StepNote body={current.body} />}
         <CommitWalkStepView step={current} />
       </article>
     </section>
   );
 }
 
+function StepNote({ body }: { body: string }) {
+  return (
+    <aside
+      data-part="commit-walk-note"
+      style={{
+        border: '1px solid rgba(33, 150, 243, 0.35)',
+        borderLeft: '4px solid var(--cb-color-accent, #2196f3)',
+        borderRadius: 8,
+        padding: '10px 12px',
+        background: 'rgba(33, 150, 243, 0.08)',
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.04, color: 'var(--cb-color-muted)', marginBottom: 4 }}>
+        Guide note
+      </div>
+      <div>{body}</div>
+    </aside>
+  );
+}
+
 function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
   const p = step.params ?? {};
   switch (step.kind) {
+    case 'overview':
+    case 'note':
+      return step.body ? null : <div style={{ color: 'var(--cb-color-muted)' }}>Continue to the next step.</div>;
     case 'diff-stats':
     case 'stats':
       return <DiffStatsWidget from={p.from ?? ''} to={p.to ?? ''} />;
@@ -111,13 +134,14 @@ function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
       const dir = p.dir === 'uses' ? 'uses' : 'usedby';
       return <ImpactInlineWidget sym={step.symbolId ?? ''} dir={dir} depth={Number.isFinite(depth) ? depth : undefined} commit={p.commit} />;
     }
+    case 'symbol':
     case 'annotation':
     case 'snippet':
       return (
         <AnnotationWidget
           sym={step.symbolId ?? ''}
           language={step.language}
-          commit={p.commit}
+          commit={p.commit ?? p.to}
           lines={p.lines}
           note={p.note}
         />
@@ -138,11 +162,14 @@ function parseSteps(raw?: string): CommitWalkStep[] {
 }
 
 function defaultStepTitle(step: CommitWalkStep): string {
+  if (step.kind === 'overview') return 'Review scope';
+  if (step.kind === 'note') return 'Note';
   if (step.kind === 'stats' || step.kind === 'diff-stats') return 'Review the size of the change';
   if (step.kind === 'files' || step.kind === 'changed-files') return 'Review changed files';
   if (step.kind === 'diff') return 'Review the symbol diff';
   if (step.kind === 'history') return 'Review symbol history';
   if (step.kind === 'impact') return 'Review impact';
+  if (step.kind === 'symbol') return 'Inspect symbol';
   if (step.kind === 'annotation' || step.kind === 'snippet') return 'Review annotated code';
   return step.kind;
 }

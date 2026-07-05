@@ -3,4 +3,5 @@
 !.dockerignore
 !bin/
 !bin/codebase-browser
-!bin/history.db
+!bin/static/
+!bin/static/**

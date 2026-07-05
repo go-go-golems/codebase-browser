@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { normalizeQueryError } from './queryErrors';
-import { getSqlJsProvider } from './sqlJsQueryProvider';
+import { liveOrSql, liveProvider, sqlProvider } from './codebaseProvider';
 
 export type SnippetKind = 'declaration' | 'body' | 'signature';
 
@@ -57,19 +57,19 @@ export const sourceApi = createApi({
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
     getSource: b.query<string, string>({
-      queryFn: (path) => providerResult(() => getSqlJsProvider().getSource(path)),
+      queryFn: (path) => providerResult(() => liveOrSql(() => liveProvider().getSource(path), () => sqlProvider().getSource(path))),
     }),
     getSnippet: b.query<string, { sym: string; kind?: SnippetKind }>({
-      queryFn: ({ sym, kind = 'declaration' }) => providerResult(() => getSqlJsProvider().getSnippet(sym, kind)),
+      queryFn: ({ sym, kind = 'declaration' }) => providerResult(() => liveOrSql(() => liveProvider().getSnippet(sym, kind), () => sqlProvider().getSnippet(sym, kind))),
     }),
     getSnippetRefs: b.query<SnippetRefView[], string>({
-      queryFn: (sym) => providerResult(() => getSqlJsProvider().getSnippetRefs(sym)),
+      queryFn: (sym) => providerResult(() => sqlProvider().getSnippetRefs(sym)),
     }),
     getSourceRefs: b.query<SourceRefView[], string>({
-      queryFn: (path) => providerResult(() => getSqlJsProvider().getSourceRefs(path)),
+      queryFn: (path) => providerResult(() => sqlProvider().getSourceRefs(path)),
     }),
     getFileXref: b.query<FileXrefResponse, string>({
-      queryFn: (path) => providerResult(() => getSqlJsProvider().getFileXref(path)),
+      queryFn: (path) => providerResult(() => sqlProvider().getFileXref(path)),
     }),
   }),
 });

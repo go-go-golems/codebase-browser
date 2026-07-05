@@ -13,6 +13,7 @@ import (
 	"github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/index"
 	"github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/query"
 	"github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/review"
+	"github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/serve"
 	"github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/symbol"
 	"github.com/wesen/codebase-browser/internal/concepts"
 	helpdocs "github.com/wesen/codebase-browser/pkg/doc"
@@ -42,6 +43,7 @@ func main() {
 	cobra.CheckErr(doc.Register(rootCmd))
 	cobra.CheckErr(history.Register(rootCmd))
 	cobra.CheckErr(review.Register(rootCmd))
+	cobra.CheckErr(serve.Register(rootCmd))
 	cobra.CheckErr(helpdocs.AddDocToHelpSystem(helpSystem))
 
 	if err := rootCmd.Execute(); err != nil {

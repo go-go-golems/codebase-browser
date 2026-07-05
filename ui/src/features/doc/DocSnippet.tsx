@@ -2,6 +2,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useGetSymbolQuery } from '../../api/indexApi';
+import { useGetSourceQuery } from '../../api/sourceApi';
 import { getSqlJsProvider } from '../../api/sqlJsQueryProvider';
 import { ExpandableSymbol } from '../symbol/ExpandableSymbol';
 import { XrefPanel } from '../symbol/XrefPanel';
@@ -120,9 +121,46 @@ export function DocSnippet({ sym, directive, lang, commit, params }: DocSnippetP
   if (directive === 'codebase-commit-walk') {
     return <CommitWalkWidget title={params?.title} stepsJSON={params?.steps} />;
   }
+  if (directive === 'codebase-file') {
+    return <DocFileSnippet path={params?.path ?? ''} range={params?.range} language={lang} />;
+  }
   if (directive === 'codebase-signature') return <DocSignature sym={sym} commit={commit} language={lang} />;
   if (directive === 'codebase-doc') return <DocGodoc sym={sym} commit={commit} />;
   return <DocFullSnippet sym={sym} commit={commit} language={lang} />;
+}
+
+function DocFileSnippet({ path, range, language }: { path: string; range?: string; language?: string }) {
+  const { data, isLoading, error } = useGetSourceQuery(path, { skip: !path });
+  if (!path) return <div data-part="error">Missing file path.</div>;
+  if (isLoading) return <pre data-part="code-block"><code>Loading file {path}…</code></pre>;
+  if (error) return <div data-part="error">Failed to load file {path}: {JSON.stringify(error)}</div>;
+  const text = sliceByRange(data ?? '', range);
+  return (
+    <section data-part="doc-snippet" data-role="file-snippet">
+      <div style={{ fontSize: 12, color: 'var(--cb-color-muted)', marginBottom: 8 }}>
+        <code>{path}</code>{range ? <> · lines <code>{range}</code></> : null}
+      </div>
+      <Code text={text} language={language || languageForPath(path)} />
+    </section>
+  );
+}
+
+function sliceByRange(text: string, range?: string): string {
+  if (!range) return text;
+  const match = /^(\d+)-(\d+)$/.exec(range);
+  if (!match) return text;
+  const start = Number.parseInt(match[1], 10);
+  const end = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1 || end < start) return text;
+  return text.split('\n').slice(start - 1, end).join('\n');
+}
+
+function languageForPath(path: string): string {
+  if (path.endsWith('.go')) return 'go';
+  if (path.endsWith('.ts') || path.endsWith('.tsx')) return 'typescript';
+  if (path.endsWith('.js') || path.endsWith('.jsx')) return 'javascript';
+  if (path.endsWith('.md')) return 'markdown';
+  return 'text';
 }
 
 function DocSignature({ sym, commit, language }: { sym: string; commit?: string; language?: string }) {

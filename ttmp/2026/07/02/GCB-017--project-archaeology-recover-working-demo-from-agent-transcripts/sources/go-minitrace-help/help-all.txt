@@ -1,0 +1,45 @@
+
+  # go-minitrace - Glazed-based Go port of minitrace                          
+                                                                              
+  Run go-minitrace help --ui to open the interactive help TUI.                
+                                                                              
+  ## General topics                                                           
+                                                                              
+  Run go-minitrace help <topic> to view a topic's page.                       
+                                                                              
+  • adapter-reference - Adapter Reference                                     
+  • convert-commands - Convert Commands                                       
+  • discover-commands - Discover Commands                                     
+  • framework-metadata-mappings - Framework Metadata Mappings                 
+  • js-api-reference - JS API Reference                                       
+  • minitrace-schema - Minitrace Schema Reference                             
+  • what-is-minitrace - What is go-minitrace                                  
+  • query-commands - Query Commands                                           
+  • structured-query-commands - Structured Query Commands                     
+  • troubleshooting - Troubleshooting                                         
+  • validate-command - Validate Command                                       
+                                                                              
+  ## Examples                                                                 
+                                                                              
+  Run go-minitrace help <example> to view an example in full.                 
+                                                                              
+  • duckdb-query-recipes - DuckDB Query Recipes                               
+  • output-formats-and-pipelines - Output Formats and Pipelines               
+  • query-duckdb - Query DuckDB Examples                                      
+                                                                              
+  ## Applications                                                             
+                                                                              
+  Run go-minitrace help <application> to view an application in full.         
+                                                                              
+  • end-to-end-analysis - End-to-End Analysis Walkthrough                     
+                                                                              
+  ## Tutorials                                                                
+                                                                              
+  Run go-minitrace help <tutorial> to view a tutorial in full.                
+                                                                              
+  • analysis-guide - Analysis Guide                                           
+  • annotation-playbook - Annotation Playbook                                 
+  • getting-started - Getting Started                                         
+  • nightly-review-playbook - Nightly Review Playbook                         
+  • writing-duckdb-queries - Writing DuckDB Queries                           
+

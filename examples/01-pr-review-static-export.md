@@ -15,7 +15,7 @@ The `staticapp.Export` function is the boundary between the indexer and the stat
 
 ### Export function body diff
 
-```codebase-diff sym=staticapp.Export from=HEAD~1 to=HEAD
+```codebase-diff sym=staticapp.Export from=b91c6a3 to=83dbe40
 ```
 
 ### Impact: callers of Export

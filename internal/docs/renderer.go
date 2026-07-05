@@ -315,7 +315,7 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 		return ref, nil
 
 	case "codebase-commit-walk":
-		steps, err := parseCommitWalkSteps(body, loaded)
+		steps, err := parseCommitWalkSteps(body, loaded, params)
 		if err != nil {
 			return nil, err
 		}
@@ -409,6 +409,11 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 			}
 		}
 		ref.FilePath = path
+		ref.Language = languageForPath(path)
+		ref.Params = map[string]string{"path": path}
+		if r := params["range"]; r != "" {
+			ref.Params["range"] = r
+		}
 		ref.Text = text
 		return ref, nil
 	}
@@ -424,7 +429,7 @@ type commitWalkStep struct {
 	Params   map[string]string `json:"params,omitempty"`
 }
 
-func parseCommitWalkSteps(lines []string, loaded *browser.Loaded) ([]commitWalkStep, error) {
+func parseCommitWalkSteps(lines []string, loaded *browser.Loaded, inherited map[string]string) ([]commitWalkStep, error) {
 	var steps []commitWalkStep
 	for i, raw := range lines {
 		line := strings.TrimSpace(raw)
@@ -470,12 +475,32 @@ func parseCommitWalkSteps(lines []string, loaded *browser.Loaded) ([]commitWalkS
 		if step.Language == "" {
 			step.Language = "go"
 		}
+		for _, key := range []string{"from", "to", "commit"} {
+			if params[key] == "" && inherited[key] != "" {
+				params[key] = inherited[key]
+			}
+		}
 		for k, v := range params {
 			step.Params[k] = v
 		}
 		steps = append(steps, step)
 	}
 	return steps, nil
+}
+
+func languageForPath(path string) string {
+	switch {
+	case strings.HasSuffix(path, ".go"):
+		return "go"
+	case strings.HasSuffix(path, ".ts"), strings.HasSuffix(path, ".tsx"):
+		return "typescript"
+	case strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".jsx"):
+		return "javascript"
+	case strings.HasSuffix(path, ".md"):
+		return "markdown"
+	default:
+		return "text"
+	}
 }
 
 func splitFields(s string) []string {
@@ -537,6 +562,9 @@ func resolveSymbol(ref string, l *browser.Loaded) (*indexer.Symbol, error) {
 		return sym, nil
 	}
 	// Short form: last segment is Name (or Recv.Method), rest is importPath.
+	// In review prose we also allow package-local forms such as
+	// "staticapp.Export". Those match by package import-path suffix or package
+	// name and are rejected if ambiguous.
 	dot := strings.LastIndex(ref, ".")
 	if dot < 0 {
 		return nil, fmt.Errorf("bad short ref %q", ref)
@@ -551,7 +579,7 @@ func resolveSymbol(ref string, l *browser.Loaded) (*indexer.Symbol, error) {
 	var candidates []*indexer.Symbol
 	for i := range l.Index.Symbols {
 		s := &l.Index.Symbols[i]
-		if s.PackageID != indexer.PackageID(importPath) {
+		if !packageRefMatches(importPath, s, l) {
 			continue
 		}
 		if s.Kind == "method" {
@@ -568,7 +596,7 @@ func resolveSymbol(ref string, l *browser.Loaded) (*indexer.Symbol, error) {
 		recv := importPath[dot2+1:]
 		for i := range l.Index.Symbols {
 			s := &l.Index.Symbols[i]
-			if s.PackageID != indexer.PackageID(pkg) {
+			if !packageRefMatches(pkg, s, l) {
 				continue
 			}
 			if s.Kind != "method" || s.Name != name {
@@ -590,6 +618,20 @@ func resolveSymbol(ref string, l *browser.Loaded) (*indexer.Symbol, error) {
 		return nil, fmt.Errorf("ambiguous %q: %s", ref, strings.Join(ids, ", "))
 	}
 	return candidates[0], nil
+}
+
+func packageRefMatches(ref string, sym *indexer.Symbol, l *browser.Loaded) bool {
+	pkgID := string(sym.PackageID)
+	pkgID = strings.TrimPrefix(pkgID, "pkg:")
+	if pkgID == ref || strings.HasSuffix(pkgID, "/"+ref) {
+		return true
+	}
+	if pkg, ok := l.Package(string(sym.PackageID)); ok {
+		if pkg.ImportPath == ref || strings.HasSuffix(pkg.ImportPath, "/"+ref) || pkg.Name == ref {
+			return true
+		}
+	}
+	return false
 }
 
 func dedent(s string) string {
