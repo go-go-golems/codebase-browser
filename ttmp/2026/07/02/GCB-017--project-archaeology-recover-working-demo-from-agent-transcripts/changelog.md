@@ -138,3 +138,13 @@ Migrated React API slices to backend-only data access and removed sql.js provide
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/src/api/codebaseProvider.ts — Removed live/sql fallback selection
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/src/api/liveApiProvider.ts — Added xref/ref live methods
 
+
+## 2026-07-05
+
+Rebuilt the no-sql.js demo, pushed yolo image ghcr.io/go-go-golems/codebase-browser:yolo-20260705-no-sqljs, deployed via GitOps edd12c9, and verified public health/history.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/codebase-browser/deployment.yaml — Updated yolo image tag to no-sqljs build
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/public/sql-wasm.wasm — Removed public sql-wasm artifact
+

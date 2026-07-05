@@ -1301,3 +1301,67 @@ The key behavior change is intentional: if the Go API is unavailable, interactiv
 ### Technical details
 - `getImpact` and commit-scoped snippet/source hydration are now backend-only too; the previously-added live impact endpoint is part of this removal commit because the UI fallback path disappeared.
 - Removing `sql.js` from `ui/package.json` also removed the lockfile package entries for `sql.js@1.14.1` and `@types/sql.js@1.4.11`.
+
+## Step 15: Rebuild and deploy the no-sql.js live demo
+
+This step finished the runtime cleanup by rebuilding the exported demo after removing the public `sql-wasm.wasm` asset, packaging the current static bundle and SQLite database into a new Docker image, and deploying that image through the yolo GitOps repository.
+
+The final public deployment is the backend-only browser runtime: the server still owns the SQLite database, but the React bundle no longer includes the sql.js provider, dependency, or public wasm artifact.
+
+### Prompt Context
+
+**User prompt (verbatim):** "i think we're done?"
+
+**Assistant interpretation:** Confirm final completion, finish remaining bookkeeping, and make sure the deployed yolo demo is healthy.
+
+**Inferred user intent:** Close out the implementation with validation evidence rather than leaving the ticket half-finished.
+
+**Commit (code):** 72a7449a4e18f56e927811ae2e1bdee061d7f044 — "ui: remove public sql wasm artifact"
+
+### What I did
+- Removed `ui/public/sql-wasm.wasm` so Vite no longer copies the old SQLite wasm runtime into exported static assets.
+- Rebuilt the rich demo with `make demo-solid` and copied `/tmp/gcb-solid-demo` into `bin/static` for Docker packaging.
+- Built and pushed `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-no-sqljs`.
+- Updated the GitOps deployment in `/home/manuel/code/wesen/2026-03-27--hetzner-k3s` and pushed commit `edd12c9 Deploy codebase-browser no-sqljs frontend`.
+- Verified ArgoCD reached `Synced Healthy` for revision `edd12c9c7d0b2344fe7b4ce257669709017864a8`.
+- Verified public `/api/health` and `/api/history/commits` returned live data.
+
+### Why
+- Removing TypeScript imports and dependencies was not sufficient while `ui/public/sql-wasm.wasm` still existed as a static copied asset.
+- The live deployment needed a rebuilt image so the public bundle matched the backend-only runtime design.
+
+### What worked
+- `make demo-solid` rebuilt the 118-commit demo with zero rendered review errors.
+- Docker push succeeded after refreshing GHCR authentication with `gh auth token | docker login ghcr.io -u go-go-golems --password-stdin`.
+- Public health returned `{"ok":true,"mode":"live-go","staticDir":"/app/static"}`.
+- Public history returned 118 commits.
+
+### What didn't work
+- The first `docker push ghcr.io/go-go-golems/codebase-browser:yolo-20260705-no-sqljs` failed with:
+  - `unauthorized: unauthenticated: User cannot be authenticated with the token provided.`
+- Re-authenticating Docker to GHCR with the GitHub CLI token fixed the push.
+
+### What I learned
+- Vite public assets must be checked separately from source imports; public files survive dependency removal and are copied verbatim.
+- ArgoCD needed a short convergence period after the GitOps push before reporting `Synced Healthy`.
+
+### What was tricky to build
+- The no-sql.js guarantee spans source code, package dependencies, public assets, exported demo assets, Docker image contents, and browser network behavior. Each layer needed a separate check because removing one layer does not imply the others are clean.
+
+### What warrants a second pair of eyes
+- Review whether embedding the 237MB `bin/static` demo in the image is still acceptable for public yolo deployments.
+- Review whether to add a CI/browser smoke test that fails on requests containing `db/codebase.db`, `sql-wasm`, or `sql.js`.
+
+### What should be done in the future
+- Add the no-frontend-DB-download browser smoke test to CI.
+- Consider separating the SQLite demo database from the application image if image size becomes operationally painful.
+
+### Code review instructions
+- Start with `ui/public/sql-wasm.wasm` deletion and `ui/package.json` dependency removal.
+- Then review `internal/server/api_xref.go`, `ui/src/api/liveApiProvider.ts`, and the API slices under `ui/src/api/`.
+- Validate with `go test ./internal/server ./internal/docs ./internal/staticapp -count=1`, `pnpm -C ui run typecheck`, `make demo-solid`, and public curl checks.
+
+### Technical details
+- Final image: `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-no-sqljs`.
+- Final GitOps commit: `edd12c9c7d0b2344fe7b4ce257669709017864a8`.
+- Final public health endpoint: `https://codebase-browser.yolo.scapegoat.dev/api/health`.
