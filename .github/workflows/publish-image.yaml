@@ -81,8 +81,10 @@ jobs:
           curl -fsS http://127.0.0.1:8080/ >/dev/null
           curl -fsS http://127.0.0.1:8080/api/health | grep -q 'live-go'
           curl -fsS http://127.0.0.1:8080/api/review-docs >/dev/null
-          ! curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
-          ! curl -fsS http://127.0.0.1:8080/sql-wasm-browser.wasm >/dev/null
+          if find bin/static -name 'sql-wasm*.wasm' -print -quit | grep -q .; then
+            echo "sql-wasm artifact should not be present in bin/static"
+            exit 1
+          fi
 
       - name: Define image metadata
         run: |
@@ -144,8 +146,6 @@ jobs:
           curl -fsS http://127.0.0.1:8080/ >/dev/null
           curl -fsS http://127.0.0.1:8080/api/health | grep -q 'live-go'
           curl -fsS http://127.0.0.1:8080/api/review-docs >/dev/null
-          ! curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
-          ! curl -fsS http://127.0.0.1:8080/sql-wasm-browser.wasm >/dev/null
 
   gitops-pr:
     name: Open GitOps PR
