@@ -10,17 +10,17 @@ The `staticapp.Export` function is the boundary between the indexer and the stat
 
 ### Export function signature
 
-```codebase-signature sym=staticapp.Export
+```codebase-signature sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export
 ```
 
 ### Export function body diff
 
-```codebase-diff sym=staticapp.Export from=b91c6a3 to=83dbe40
+```codebase-diff sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export from=b91c6a3 to=83dbe40
 ```
 
 ### Impact: callers of Export
 
-```codebase-impact sym=staticapp.Export dir=usedby depth=2
+```codebase-impact sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.Export dir=usedby depth=2
 ```
 
 ## Notes

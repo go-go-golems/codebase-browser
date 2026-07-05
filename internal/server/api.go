@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -221,6 +222,18 @@ func (s *Server) resolveCommit(ref string) (string, error) {
 		err := s.DB.QueryRow(`SELECT hash FROM commits WHERE error = '' ORDER BY author_time DESC LIMIT 1`).Scan(&hash)
 		if err != nil {
 			return "", fmt.Errorf("resolve HEAD: %w", err)
+		}
+		return hash, nil
+	}
+	if strings.HasPrefix(ref, "HEAD~") {
+		offset, err := strconv.Atoi(strings.TrimPrefix(ref, "HEAD~"))
+		if err != nil || offset < 0 {
+			return "", fmt.Errorf("commit ref not found: %s", ref)
+		}
+		var hash string
+		err = s.DB.QueryRow(`SELECT hash FROM commits WHERE error = '' ORDER BY author_time DESC LIMIT 1 OFFSET ?`, offset).Scan(&hash)
+		if err != nil {
+			return "", fmt.Errorf("commit ref not found: %s", ref)
 		}
 		return hash, nil
 	}

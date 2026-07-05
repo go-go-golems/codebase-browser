@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	htmlpkg "html"
 	"io/fs"
 	"regexp"
 	"strconv"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/wesen/codebase-browser/internal/browser"
 	"github.com/wesen/codebase-browser/internal/indexer"
+	"github.com/wesen/codebase-browser/internal/reviewwidgets"
 )
 
 // SnippetRef is one resolved snippet embedding inside a doc page.
@@ -122,21 +122,22 @@ func preprocess(src []byte, loaded *browser.Loaded, sourceFS fs.FS) ([]byte, []S
 		if j <= len(lines) {
 			body = lines[i+1 : j]
 		}
+		stubCounter++
+		stubID := "stub-" + strconv.Itoa(stubCounter)
 		ref, err := resolveDirective(info, body, loaded, sourceFS)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("line %d: %s", i+1, err))
 			// Emit a visible marker so authors see the error in the rendered page.
 			out = append(out, fmt.Sprintf("> **doc error**: %s (`%s`)", err, info))
 		} else {
-			stubCounter++
-			ref.StubID = "stub-" + strconv.Itoa(stubCounter)
+			ref.StubID = stubID
 			snippets = append(snippets, *ref)
-			// Emit the stub as a raw-HTML block (blank line above + below so
-			// goldmark treats it as a standalone HTML block rather than
-			// inline HTML — this preserves the stub's attributes verbatim
-			// through markdown rendering).
+			// Review/static pages now render widgets from the structured page model
+			// and SnippetRef rows, not from hidden HTML stubs. Keep the legacy HTML
+			// output deliberately inert so Markdown rendering cannot corrupt source
+			// text and React never has to scan for data-codebase-snippet markers.
 			out = append(out, "")
-			out = append(out, stubHTML(ref))
+			out = append(out, fmt.Sprintf("> Resolved `%s` directive.", ref.Directive))
 			out = append(out, "")
 		}
 		if j < len(lines) {
@@ -148,53 +149,10 @@ func preprocess(src []byte, loaded *browser.Loaded, sourceFS fs.FS) ([]byte, []S
 	return []byte(strings.Join(out, "\n")), snippets, errs
 }
 
-// stubHTML renders a SnippetRef as a single self-contained <div> that the
-// React frontend can hydrate. The stub's inner body is the pre-resolved
-// plaintext fallback so JS-disabled readers still see something useful.
-func stubHTML(ref *SnippetRef) string {
-	var body string
-	switch ref.Directive {
-	case "codebase-signature":
-		body = "<pre><code>" + htmlpkg.EscapeString(ref.Text) + "</code></pre>"
-	case "codebase-doc":
-		body = "<blockquote>" + htmlpkg.EscapeString(ref.Text) + "</blockquote>"
-	default: // codebase-snippet, codebase-file
-		lang := ref.Language
-		if lang == "" {
-			lang = "text"
-		}
-		body = `<pre><code class="language-` + lang + `">` +
-			htmlpkg.EscapeString(ref.Text) + "</code></pre>"
-	}
-	commitAttr := ""
-	if ref.CommitHash != "" {
-		commitAttr = fmt.Sprintf(` data-commit=%q`, ref.CommitHash)
-	}
-	paramsAttr := ""
-	if len(ref.Params) > 0 {
-		paramsJSON, _ := json.Marshal(ref.Params)
-		// HTML attributes cannot safely contain raw JSON quotes escaped with
-		// backslashes: the browser still treats the quote as the end of the
-		// attribute. Escape as HTML instead so getAttribute returns valid JSON.
-		paramsAttr = ` data-params="` + htmlpkg.EscapeString(string(paramsJSON)) + `"`
-	}
-	return fmt.Sprintf(
-		`<div class="codebase-snippet" data-codebase-snippet `+
-			`data-stub-id=%q data-sym=%q data-directive=%q `+
-			`data-kind=%q data-lang=%q%s%s>%s</div>`,
-		ref.StubID, ref.SymbolID, ref.Directive, ref.Kind, ref.Language, commitAttr, paramsAttr, body,
-	)
-}
-
 func resolveDirective(info string, body []string, loaded *browser.Loaded, sourceFS fs.FS) (*SnippetRef, error) {
-	parts := splitFields(info)
-	directive := parts[0]
-	params := map[string]string{}
-	for _, p := range parts[1:] {
-		kv := strings.SplitN(p, "=", 2)
-		if len(kv) == 2 {
-			params[kv[0]] = kv[1]
-		}
+	directive, params := reviewwidgets.ParseInfo(info)
+	if err := reviewwidgets.ValidateParams(directive, params); err != nil {
+		return nil, err
 	}
 	ref := &SnippetRef{Directive: directive}
 	// Capture commit= param for history-aware resolution (GCB-010 Slice 0).
@@ -315,7 +273,7 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 		return ref, nil
 
 	case "codebase-commit-walk":
-		steps, err := parseCommitWalkSteps(body, loaded, params)
+		steps, err := parseCommitWalkSteps(body, loaded)
 		if err != nil {
 			return nil, err
 		}
@@ -329,6 +287,15 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 		ref.Kind = "commit-walk"
 		ref.Language = "text"
 		ref.Params = map[string]string{"steps": string(stepsJSON)}
+		if from := params["from"]; from != "" {
+			ref.Params["from"] = from
+		}
+		if to := params["to"]; to != "" {
+			ref.Params["to"] = to
+		}
+		if commit := params["commit"]; commit != "" {
+			ref.Params["commit"] = commit
+		}
 		if title := params["title"]; title != "" {
 			ref.Params["title"] = title
 		}
@@ -409,11 +376,6 @@ func resolveDirective(info string, body []string, loaded *browser.Loaded, source
 			}
 		}
 		ref.FilePath = path
-		ref.Language = languageForPath(path)
-		ref.Params = map[string]string{"path": path}
-		if r := params["range"]; r != "" {
-			ref.Params["range"] = r
-		}
 		ref.Text = text
 		return ref, nil
 	}
@@ -429,31 +391,25 @@ type commitWalkStep struct {
 	Params   map[string]string `json:"params,omitempty"`
 }
 
-func parseCommitWalkSteps(lines []string, loaded *browser.Loaded, inherited map[string]string) ([]commitWalkStep, error) {
+func parseCommitWalkSteps(lines []string, loaded *browser.Loaded) ([]commitWalkStep, error) {
 	var steps []commitWalkStep
 	for i, raw := range lines {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		parts := splitFields(line)
+		parts := reviewwidgets.SplitFields(line)
 		if len(parts) == 0 {
 			continue
 		}
 		if parts[0] != "step" {
 			return nil, fmt.Errorf("commit walk line %d: expected step, got %q", i+1, parts[0])
 		}
-		params := map[string]string{}
-		for _, p := range parts[1:] {
-			kv := strings.SplitN(p, "=", 2)
-			if len(kv) == 2 {
-				params[kv[0]] = kv[1]
-			}
+		params := reviewwidgets.ParamsFromFields(parts[1:])
+		if err := reviewwidgets.ValidateStepParams(params); err != nil {
+			return nil, fmt.Errorf("commit walk line %d: %w", i+1, err)
 		}
 		kind := params["kind"]
-		if kind == "" {
-			return nil, fmt.Errorf("commit walk line %d: missing kind=", i+1)
-		}
 		step := commitWalkStep{
 			Kind:   kind,
 			Title:  params["title"],
@@ -475,11 +431,6 @@ func parseCommitWalkSteps(lines []string, loaded *browser.Loaded, inherited map[
 		if step.Language == "" {
 			step.Language = "go"
 		}
-		for _, key := range []string{"from", "to", "commit"} {
-			if params[key] == "" && inherited[key] != "" {
-				params[key] = inherited[key]
-			}
-		}
 		for k, v := range params {
 			step.Params[k] = v
 		}
@@ -488,150 +439,19 @@ func parseCommitWalkSteps(lines []string, loaded *browser.Loaded, inherited map[
 	return steps, nil
 }
 
-func languageForPath(path string) string {
-	switch {
-	case strings.HasSuffix(path, ".go"):
-		return "go"
-	case strings.HasSuffix(path, ".ts"), strings.HasSuffix(path, ".tsx"):
-		return "typescript"
-	case strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".jsx"):
-		return "javascript"
-	case strings.HasSuffix(path, ".md"):
-		return "markdown"
-	default:
-		return "text"
-	}
-}
-
-func splitFields(s string) []string {
-	var fields []string
-	var b strings.Builder
-	quote := rune(0)
-	escaped := false
-	flush := func() {
-		if b.Len() == 0 {
-			return
-		}
-		fields = append(fields, b.String())
-		b.Reset()
-	}
-	for _, r := range s {
-		if escaped {
-			b.WriteRune(r)
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			if r == quote {
-				quote = 0
-			} else {
-				b.WriteRune(r)
-			}
-			continue
-		}
-		if r == '\'' || r == '"' {
-			quote = r
-			continue
-		}
-		if r == ' ' || r == '\t' {
-			flush()
-			continue
-		}
-		b.WriteRune(r)
-	}
-	if escaped {
-		b.WriteRune('\\')
-	}
-	flush()
-	return fields
-}
-
-// resolveSymbol accepts either a full "sym:..." ID or a short form
-// "pkg/import/path.Name" / "pkg/import/path.Recv.Method". Ambiguous short
-// forms return an error so authors notice.
+// resolveSymbol accepts only full stable symbol IDs. Review documents should
+// use the exact `sym:...` IDs stored in the database and shown in browser URLs;
+// short refs were intentionally removed because they were ambiguous and made
+// examples fail when package names did not equal import paths.
 func resolveSymbol(ref string, l *browser.Loaded) (*indexer.Symbol, error) {
-	if strings.HasPrefix(ref, "sym:") {
-		sym, ok := l.Symbol(ref)
-		if !ok {
-			return nil, fmt.Errorf("symbol %s not found", ref)
-		}
-		return sym, nil
+	if !strings.HasPrefix(ref, "sym:") {
+		return nil, fmt.Errorf("symbol %q must use a full sym: ID", ref)
 	}
-	// Short form: last segment is Name (or Recv.Method), rest is importPath.
-	// In review prose we also allow package-local forms such as
-	// "staticapp.Export". Those match by package import-path suffix or package
-	// name and are rejected if ambiguous.
-	dot := strings.LastIndex(ref, ".")
-	if dot < 0 {
-		return nil, fmt.Errorf("bad short ref %q", ref)
+	sym, ok := l.Symbol(ref)
+	if !ok {
+		return nil, fmt.Errorf("symbol %s not found", ref)
 	}
-	importPath := ref[:dot]
-	name := ref[dot+1:]
-	// Short form "pkg.Name" addresses top-level (package-scoped) symbols
-	// only. Methods share the package ID of their receiver type, so without
-	// the filter below a ref like "internal/indexer.Extract" matches both
-	// `func Extract` and any `method X.Extract` in the same package. Force
-	// method use to go through the "pkg.Recv.Name" form handled below.
-	var candidates []*indexer.Symbol
-	for i := range l.Index.Symbols {
-		s := &l.Index.Symbols[i]
-		if !packageRefMatches(importPath, s, l) {
-			continue
-		}
-		if s.Kind == "method" {
-			continue
-		}
-		if s.Name != name {
-			continue
-		}
-		candidates = append(candidates, s)
-	}
-	// Also try treating it as a method: strip the "Recv." from name.
-	if dot2 := strings.LastIndex(importPath, "."); dot2 >= 0 {
-		pkg := importPath[:dot2]
-		recv := importPath[dot2+1:]
-		for i := range l.Index.Symbols {
-			s := &l.Index.Symbols[i]
-			if !packageRefMatches(pkg, s, l) {
-				continue
-			}
-			if s.Kind != "method" || s.Name != name {
-				continue
-			}
-			if s.Receiver != nil && s.Receiver.TypeName == recv {
-				candidates = append(candidates, s)
-			}
-		}
-	}
-	if len(candidates) == 0 {
-		return nil, fmt.Errorf("symbol %q not found", ref)
-	}
-	if len(candidates) > 1 {
-		ids := make([]string, len(candidates))
-		for i, c := range candidates {
-			ids[i] = c.ID
-		}
-		return nil, fmt.Errorf("ambiguous %q: %s", ref, strings.Join(ids, ", "))
-	}
-	return candidates[0], nil
-}
-
-func packageRefMatches(ref string, sym *indexer.Symbol, l *browser.Loaded) bool {
-	pkgID := string(sym.PackageID)
-	pkgID = strings.TrimPrefix(pkgID, "pkg:")
-	if pkgID == ref || strings.HasSuffix(pkgID, "/"+ref) {
-		return true
-	}
-	if pkg, ok := l.Package(string(sym.PackageID)); ok {
-		if pkg.ImportPath == ref || strings.HasSuffix(pkg.ImportPath, "/"+ref) || pkg.Name == ref {
-			return true
-		}
-	}
-	return false
+	return sym, nil
 }
 
 func dedent(s string) string {

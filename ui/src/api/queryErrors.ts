@@ -16,12 +16,19 @@ export class QueryError extends Error {
   }
 }
 
-export function normalizeQueryError(err: unknown): { status: string; data?: string } {
+export type QueryErrorPayload = {
+  message: string;
+  details?: Record<string, unknown>;
+};
+
+export type ProviderError = { status: string; data?: QueryErrorPayload };
+
+export function normalizeQueryError(err: unknown): { status: string; data?: QueryErrorPayload } {
   if (err instanceof QueryError) {
-    return { status: err.code, data: err.message };
+    return { status: err.code, data: { message: err.message, details: err.details } };
   }
   if (err instanceof Error) {
-    return { status: 'SQL_ERROR', data: err.message };
+    return { status: 'SQL_ERROR', data: { message: err.message } };
   }
-  return { status: 'SQL_ERROR', data: String(err) };
+  return { status: 'SQL_ERROR', data: { message: String(err) } };
 }

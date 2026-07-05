@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
-import { normalizeQueryError } from './queryErrors';
 import { apiProvider } from './codebaseProvider';
+import { normalizeQueryError, type ProviderError } from './queryErrors';
 
 export interface SnippetRef {
   stubId: string;
@@ -10,16 +10,37 @@ export interface SnippetRef {
   kind?: string;
   language?: string;
   text: string;
+  commitHash?: string;
+  params?: Record<string, string>;
   startLine?: number;
   endLine?: number;
+}
+
+export interface ReviewDiagnostic {
+  severity: string;
+  line?: number;
+  directive?: string;
+  message: string;
+}
+
+export interface ReviewPageBlock {
+  type: 'markdown' | 'widget';
+  id?: string;
+  html?: string;
+  directive?: string;
+  props?: Record<string, string>;
+  body?: string;
+  line?: number;
 }
 
 export interface DocPage {
   slug: string;
   title: string;
-  html: string;
+  html?: string;
   snippets: SnippetRef[];
   errors?: string[];
+  blocks?: ReviewPageBlock[];
+  diagnostics?: ReviewDiagnostic[];
 }
 
 export interface PageMeta {
@@ -32,8 +53,6 @@ export interface ReviewDocMeta {
   slug: string;
   title: string;
 }
-
-type ProviderError = { status: string; data?: string };
 
 const noopBaseQuery: BaseQueryFn<void, unknown, ProviderError> = async () => ({ data: undefined });
 

@@ -25,9 +25,9 @@ Two separate DB paths matter:
 | DB | Produced by | Use |
 |----|-------------|-----|
 | **Source DB** | `review index` or `review db create` | Query with `sqlite3`, hand to an LLM, or use as input to `review export` |
-| **Export DB** (`db/codebase.db`) | `review export` (copies and enriches the source DB) | The static browser opens this file with sql.js. Contains `static_review_rendered_docs` and rendered HTML. |
+| **Export DB** (`db/codebase.db`) | `review export` (copies and enriches the source DB) | The live Go server opens this file. Contains `static_review_pages` with structured markdown/widget blocks. |
 
-`review export` copies the source DB to `db/codebase.db` in the output directory, then writes `static_review_rendered_docs` rows into the output DB. The source DB is never modified.
+`review export` copies the source DB to `db/codebase.db` in the output directory, then writes `static_review_pages` rows into the output DB. The source DB is never modified.
 
 ## Database structure
 
@@ -39,15 +39,18 @@ The review database is a standard SQLite file with two groups of tables:
 
 ## History tables
 
-> ⚠️ **Byte offsets, not UTF-8 character offsets.** Source bodies are sliced using `start_offset` and `end_offset` from `snapshot_symbols`, which are byte offsets into `file_contents.content` **before** UTF-8 decoding. JavaScript string indexing uses UTF-16 code units. If you extract bytes in JavaScript and then decode as UTF-8, the character positions will not match the offsets in this schema. Always decode the bytes to a string before indexing by character position.
+The review database uses a **normalized schema** where each unique entity (symbol, file, package, ref set) is stored once, and narrow mapping tables record which version appears in which commit. The old `snapshot_*` table shapes are available as views for backward-compatible querying.
 
-### `commits`
+### Base tables (stored once)
+
+#### `commits`
 
 One row per indexed commit.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `hash` | TEXT PK | Full 40-character SHA |
+| `id` | INTEGER PK | Auto-increment |
+| `hash` | TEXT UNIQUE | Full 40-character SHA |
 | `short_hash` | TEXT | 7-character abbreviation |
 | `message` | TEXT | Commit message |
 | `author_name` | TEXT | Author name |
@@ -56,51 +59,51 @@ One row per indexed commit.
 | `parent_hashes` | TEXT | JSON array of parent SHAs |
 | `tree_hash` | TEXT | Git tree hash |
 | `indexed_at` | INTEGER | When the row was inserted |
+| `sequence` | INTEGER | Explicit review-range order; larger means later/latest |
 | `branch` | TEXT | Branch name (if supplied) |
 | `error` | TEXT | Empty unless indexing failed |
 
-### `snapshot_packages`
+#### `packages`
 
-One row per package per commit.
+One row per unique package (keyed by `stable_id`).
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `commit_hash` | TEXT FK | References `commits(hash)` |
-| `id` | TEXT | `pkg:<importPath>` |
+| `id` | INTEGER PK | Auto-increment |
+| `stable_id` | TEXT UNIQUE | `pkg:<importPath>` |
 | `import_path` | TEXT | Go/TS import path |
 | `name` | TEXT | Package name |
 | `doc` | TEXT | Package comment |
 | `language` | TEXT | `"go"` or `"ts"` |
 
-### `snapshot_files`
+#### `files`
 
-One row per file per commit.
+One row per unique file version (keyed by `stable_id` + `sha256`).
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `commit_hash` | TEXT FK | References `commits(hash)` |
-| `id` | TEXT | `file:<path>` |
+| `id` | INTEGER PK | Auto-increment |
+| `stable_id` | TEXT | `file:<path>` |
 | `path` | TEXT | Relative path |
-| `package_id` | TEXT | References `snapshot_packages(id)` |
+| `package_id` | INTEGER FK | References `packages(id)` |
 | `size` | INTEGER | File size in bytes |
 | `line_count` | INTEGER | Number of lines |
 | `sha256` | TEXT | File content hash |
 | `language` | TEXT | `"go"` or `"ts"` |
 | `build_tags_json` | TEXT | JSON array of build tags |
-| `content_hash` | TEXT | References `file_contents` |
 
-### `snapshot_symbols`
+#### `symbols`
 
-One row per symbol per commit. A "symbol" is any top-level declaration: function, method, type, const, var.
+One row per unique symbol body+location version (keyed by `stable_id` + `body_hash` + `file_id` + `start_offset` + `end_offset`). A "symbol" is any top-level declaration: function, method, type, const, var. File/range identity is part of the key so an unchanged symbol that moves files or offsets remains historically tied to the file version that existed in each commit.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `commit_hash` | TEXT FK | References `commits(hash)` |
-| `id` | TEXT | `sym:<importPath>.<kind>.<name>` |
+| `id` | INTEGER PK | Auto-increment |
+| `stable_id` | TEXT | `sym:<importPath>.<kind>.<name>` |
 | `kind` | TEXT | `func`, `method`, `type`, `var`, `const` |
 | `name` | TEXT | Symbol name |
-| `package_id` | TEXT | Package ID |
-| `file_id` | TEXT | File ID |
+| `package_id` | INTEGER FK | References `packages(id)` |
+| `file_id` | INTEGER FK | References `files(id)` |
 | `start_line` / `end_line` | INTEGER | Line range |
 | `start_col` / `end_col` | INTEGER | Column range |
 | `start_offset` / `end_offset` | INTEGER | **Byte offsets** (authoritative for slicing) |
@@ -114,34 +117,89 @@ One row per symbol per commit. A "symbol" is any top-level declaration: function
 | `tags_json` | TEXT | JSON array of struct tags |
 | `body_hash` | TEXT | SHA-256 of function body bytes |
 
-### `snapshot_refs`
+#### `ref_versions`
 
-One row per cross-reference per commit.
+One row per unique ref set (keyed by `from_symbol_id` + `to_stable_id` + `kind` + `file_id`). Multiple locations for the same ref are collapsed into a JSON array.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `commit_hash` | TEXT FK | References `commits(hash)` |
-| `id` | INTEGER | Auto-increment within commit |
-| `from_symbol_id` | TEXT | Caller |
-| `to_symbol_id` | TEXT | Callee |
+| `id` | INTEGER PK | Auto-increment |
+| `from_symbol_id` | INTEGER FK | References `symbols(id)` — caller |
+| `to_stable_id` | TEXT | Stable ID of the callee |
 | `kind` | TEXT | `call`, `uses-type`, `reads`, `use` |
-| `file_id` | TEXT | Where the reference occurs |
-| `start_line` / `end_line` | INTEGER | Line range |
-| `start_col` / `end_col` | INTEGER | Column range |
-| `start_offset` / `end_offset` | INTEGER | Byte offsets |
+| `file_id` | INTEGER FK | References `files(id)` |
+| `locations_json` | TEXT | JSON array of `{start_line, start_col, end_line, end_col, start_offset, end_offset}` objects |
 
-### `file_contents`
+### Mapping tables (commit ↔ entity)
 
-Deduplicated file content blobs.
+These narrow tables record which entity version appears in which commit. They use `WITHOUT ROWID` for compact storage.
+
+#### `commit_packages`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `commit_id` | INTEGER FK | References `commits(id)` |
+| `package_id` | INTEGER FK | References `packages(id)` |
+
+#### `commit_files`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `commit_id` | INTEGER FK | References `commits(id)` |
+| `file_id` | INTEGER FK | References `files(id)` |
+
+#### `commit_symbols`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `commit_id` | INTEGER FK | References `commits(id)` |
+| `symbol_id` | INTEGER FK | References `symbols(id)` |
+
+#### `commit_refs`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `commit_id` | INTEGER FK | References `commits(id)` |
+| `ref_version_id` | INTEGER FK | References `ref_versions(id)` |
+
+### Content table
+
+#### `file_contents`
+
+Deduplicated file content blobs (keyed by SHA-256).
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `content_hash` | TEXT PK | SHA-256 of content |
 | `content` | BLOB | Raw file bytes |
 
-### `symbol_history` (view)
+### Schema metadata
 
-A convenience view joining `snapshot_symbols` with `commits`.
+#### `schema_info`
+
+Small key/value metadata table for identifying the clean-cut schema version in exported or source review databases.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `key` | TEXT PK | Metadata key, e.g. `history_schema_version` |
+| `value` | TEXT | Metadata value |
+
+### Views (compatibility layer)
+
+The `snapshot_packages`, `snapshot_files`, `snapshot_symbols`, and `snapshot_refs` views recreate the old "one row per (commit, entity)" table shape by joining mapping tables with base tables. The browser's SQL queries use these views.
+
+**`snapshot_packages`** — joins `commit_packages → packages`, projecting `commits.hash` as `commit_hash` and `packages.stable_id` as `id`.
+
+**`snapshot_files`** — joins `commit_files → files`, projecting integer IDs back to stable string IDs. File content is joined via `sha256 = file_contents.content_hash`.
+
+**`snapshot_symbols`** — joins `commit_symbols → symbols`, projecting all symbol columns with `commit_hash` and stable string IDs.
+
+**`snapshot_refs`** — joins `commit_refs → ref_versions → symbols, files` and expands `locations_json` into individual rows using `json_each()`. Each location becomes one row with `start_line`, `start_col`, `end_line`, `end_col`, `start_offset`, `end_offset` columns and a synthetic `id` via `row_number()`.
+
+**`symbol_history`** — convenience view joining `snapshot_symbols` with `commits`.
+
+> [!NOTE]
+> All queries in this guide use the `snapshot_*` views. They produce the same column names and types as the original tables, so existing SQL queries continue to work unchanged.
 
 ## Review tables
 
@@ -167,7 +225,7 @@ One row per resolved `codebase-*` directive in a review doc.
 |--------|------|-------------|
 | `id` | INTEGER PK | Auto-increment |
 | `doc_id` | INTEGER FK | References `review_docs(id)` |
-| `stub_id` | TEXT | e.g. `stub-1` |
+| `stub_id` | TEXT | Stable per-document snippet key such as `stub-1` (retained as a snippet identifier, not an HTML mount stub) |
 | `directive` | TEXT | `codebase-snippet`, `codebase-diff`, etc. |
 | `symbol_id` | TEXT | Resolved symbol ID |
 | `file_path` | TEXT | Source file path |
@@ -178,17 +236,16 @@ One row per resolved `codebase-*` directive in a review doc.
 | `start_line` / `end_line` | INTEGER | Line range |
 | `commit_hash` | TEXT | If `commit=` was specified |
 
-### `static_review_rendered_docs`
+### `static_review_pages`
 
-One row per rendered review document in the exported browser database (`db/codebase.db`). This table is populated by `review export`, not by `review index`.
+One row per structured review document in the exported browser database (`db/codebase.db`). This table is populated by `review export`, not by `review index`. The browser renders the ordered block model directly; it does not scan HTML for widget placeholders.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `slug` | TEXT PK | Review document slug |
-| `title` | TEXT | Rendered document title |
-| `html` | TEXT | Export-time rendered HTML with widget placeholders |
-| `snippets_json` | TEXT | JSON array of resolved snippet/widget metadata |
-| `errors_json` | TEXT | JSON array of render errors; `[]` when clean |
+| `title` | TEXT | Review document title |
+| `blocks_json` | TEXT | JSON array of ordered blocks. Markdown blocks contain rendered HTML; widget blocks contain directive names and params. |
+| `diagnostics_json` | TEXT | JSON array of structured render/validation diagnostics; `[]` when clean |
 | `rendered_at` | INTEGER | Unix timestamp when export rendered the document |
 
 ## Common SQL queries
@@ -198,7 +255,7 @@ One row per rendered review document in the exported browser database (`db/codeb
 ```sql
 SELECT short_hash, message, author_name, datetime(author_time, 'unixepoch') AS date
 FROM commits
-ORDER BY author_time DESC;
+ORDER BY sequence DESC, author_time DESC;
 ```
 
 ### Find symbols whose signatures changed between the first and last commit
@@ -241,7 +298,7 @@ FROM snapshot_refs r
 JOIN snapshot_symbols s ON s.id = r.from_symbol_id AND s.commit_hash = r.commit_hash
 JOIN snapshot_files f ON f.id = s.file_id AND f.commit_hash = s.commit_hash
 WHERE r.to_symbol_id = 'sym:github.com/foo/bar.func.Target'
-  AND r.commit_hash = (SELECT hash FROM commits ORDER BY author_time DESC LIMIT 1);
+  AND r.commit_hash = (SELECT hash FROM commits ORDER BY sequence DESC, author_time DESC LIMIT 1);
 ```
 
 ### List review documents and their snippet counts
@@ -266,7 +323,7 @@ Examples:
 - `sym:github.com/wesen/codebase-browser/internal/indexer.func.Extract`
 - `sym:github.com/wesen/codebase-browser/internal/indexer.method.Store.LoadSnapshot`
 
-Short refs (used in markdown directives) are resolved by matching the last segment against unambiguous symbols in the given package.
+Markdown directives must use full `sym:` IDs. Short refs are intentionally unsupported because they are ambiguous across packages.
 
 ## Commit range syntax
 
@@ -280,6 +337,18 @@ The `--commits` flag accepts any git log range specification:
 | `HEAD` | Just the current commit |
 | `--all` | All reachable commits |
 
+## Integrity validation
+
+Run the built-in validator before publishing or handing a long-history database to reviewers:
+
+```bash
+codebase-browser review db validate --db review.db
+```
+
+The validator checks commit-local consistency for the snapshot views. In particular, every `snapshot_symbols.file_id` must join to a `snapshot_files.id` in the same commit, and every `snapshot_refs.file_id` / `from_symbol_id` must join to commit-local file and symbol rows. These checks catch stale historical mappings that can otherwise surface as browser body-diff or xref failures.
+
+A healthy database prints `OK` and zero bad joins. Any non-zero count means the database should be rebuilt with the current schema and indexer.
+
 ## Troubleshooting
 
 | Problem | Cause | Solution |
@@ -287,7 +356,9 @@ The `--commits` flag accepts any git log range specification:
 | `UNIQUE constraint failed: snapshot_symbols` | Duplicate symbol IDs (e.g. blank identifiers) | Fixed in history loader — first occurrence wins |
 | `no commits in review database` | `LoadLatestSnapshot` called on empty DB | Run `review index` or `review db create` first |
 | `render doc: symbol not found` | Doc references a symbol not in indexed commits | Ensure the commit range includes the symbol |
-| Large `.db` file | File contents duplicated across commits | `file_contents` deduplicates by SHA-256; this is expected for large ranges |
+| **0 snippets resolved in review doc** | Directives reference symbols that are missing from the indexed range or are not full `sym:` IDs | Use full `sym:` IDs; query DB: `SELECT DISTINCT stable_id FROM symbols` |
+| **Fewer packages than expected** | Default `--patterns` only covers `./cmd/...` and `./internal/...` | Pass `--patterns` explicitly: `--patterns ./...,./pkg/...` |
+| Byte offsets don't match JavaScript string indices | `start_offset`/`end_offset` are byte offsets, not UTF-16 code units | Always decode `file_contents.content` bytes to a string before indexing by position |
 
 ## See Also
 

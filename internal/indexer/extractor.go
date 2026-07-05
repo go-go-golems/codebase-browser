@@ -39,6 +39,11 @@ func Extract(opts ExtractOptions) (*Index, error) {
 		return nil, fmt.Errorf("abs module root: %w", err)
 	}
 
+	// GOWORK=off disables Go workspace mode so that packages.Load resolves
+	// patterns against the local go.mod even when a parent go.work exists.
+	// This is essential when extracting from git worktrees created inside
+	// the repo directory — they inherit the parent go.work but aren't listed
+	// as workspace modules, causing packages.Load to fail silently.
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo |
@@ -46,6 +51,7 @@ func Extract(opts ExtractOptions) (*Index, error) {
 		Dir:   absRoot,
 		Fset:  token.NewFileSet(),
 		Tests: opts.IncludeTests,
+		Env:   append(os.Environ(), "GOWORK=off"),
 	}
 
 	pkgs, err := packages.Load(cfg, opts.Patterns...)

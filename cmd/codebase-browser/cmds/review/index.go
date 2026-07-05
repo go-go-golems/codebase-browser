@@ -19,6 +19,9 @@ func newIndexCmd() *cobra.Command {
 		patterns     []string
 		includeTests bool
 		parallelism  int
+		incremental  bool
+		docsOnly     bool
+		strictDocs   bool
 	)
 
 	cmd := &cobra.Command{
@@ -30,7 +33,7 @@ The database contains:
   - Per-commit snapshots (commits, snapshot_symbols, snapshot_files, snapshot_refs)
   - Review documents (review_docs, review_doc_snippets)
 
-This is the input for 'review export', which packages a static sql.js browser.
+This is the input for 'review export', which packages a live-server browser bundle.
 
 For multi-commit ranges, review indexing automatically uses git worktrees so
 source, symbol, reference, and body-hash snapshots match each commit. A single
@@ -55,11 +58,29 @@ Examples:
 				return fmt.Errorf("--docs is required (provide markdown files or directories)")
 			}
 
-			store, err := review.Create(dbPath)
+			var store *review.Store
+			var err error
+			switch {
+			case docsOnly:
+				store, err = review.Open(dbPath)
+			case incremental:
+				store, err = review.OpenOrCreate(dbPath)
+			default:
+				store, err = review.Create(dbPath)
+			}
 			if err != nil {
-				return fmt.Errorf("create review db: %w", err)
+				return fmt.Errorf("open review db: %w", err)
 			}
 			defer func() { _ = store.Close() }()
+			if docsOnly {
+				hasCommits, err := store.HasCommits(ctx)
+				if err != nil {
+					return fmt.Errorf("check existing review db: %w", err)
+				}
+				if !hasCommits {
+					return fmt.Errorf("--docs-only requires an existing review database with at least one indexed commit")
+				}
+			}
 
 			opts := review.IndexOptions{
 				RepoRoot:     repoRoot,
@@ -68,6 +89,9 @@ Examples:
 				Patterns:     patterns,
 				IncludeTests: includeTests,
 				Parallelism:  parallelism,
+				Incremental:  incremental,
+				DocsOnly:     docsOnly,
+				StrictDocs:   strictDocs,
 				OnProgress: func(phase string, done, total int, detail string) {
 					fmt.Fprintf(os.Stderr, "  [%s %d/%d] %s\n", phase, done, total, detail)
 				},
@@ -84,6 +108,9 @@ Examples:
 			for _, idxErr := range result.Errors {
 				fmt.Fprintf(os.Stderr, "  ERROR %s: %v\n", idxErr.Detail, idxErr.Err)
 			}
+			if len(result.Errors) > 0 {
+				return fmt.Errorf("index completed with %d error(s)", len(result.Errors))
+			}
 
 			return nil
 		},
@@ -93,9 +120,12 @@ Examples:
 	cmd.Flags().StringVar(&repoRoot, "repo-root", ".", "Path to git repository root")
 	cmd.Flags().StringVar(&commitRange, "commits", "", "Git log range spec (e.g. HEAD~10..HEAD)")
 	cmd.Flags().StringArrayVar(&docsPaths, "docs", nil, "Markdown files or directories to index")
-	cmd.Flags().StringArrayVar(&patterns, "patterns", nil, "Go package patterns for extraction")
+	cmd.Flags().StringSliceVar(&patterns, "patterns", nil, "Go package patterns for extraction (repeat flag or comma-separate values)")
 	cmd.Flags().BoolVar(&includeTests, "include-tests", true, "Include test files")
 	cmd.Flags().IntVar(&parallelism, "parallelism", 1, "Max concurrent worktrees for multi-commit indexing")
+	cmd.Flags().BoolVar(&incremental, "incremental", false, "Append to existing database instead of recreating it")
+	cmd.Flags().BoolVar(&docsOnly, "docs-only", false, "Only re-index markdown docs, skip commit indexing (requires existing DB)")
+	cmd.Flags().BoolVar(&strictDocs, "strict-docs", false, "Fail if markdown review docs contain unresolved codebase-* directives")
 
 	_ = cmd.MarkFlagRequired("docs")
 

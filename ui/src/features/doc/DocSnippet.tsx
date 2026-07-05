@@ -30,9 +30,10 @@ export interface DocSnippetProps {
   lang: string;
   commit?: string;
   params?: Record<string, string>;
+  text?: string;
 }
 
-export function DocSnippet({ sym, directive, lang, commit, params }: DocSnippetProps) {
+export function DocSnippet({ sym, directive, lang, commit, params, text }: DocSnippetProps) {
   if (directive === 'codebase-diff') {
     return <SymbolDiffInlineWidget sym={sym} from={params?.from ?? ''} to={params?.to ?? ''} />;
   }
@@ -70,9 +71,18 @@ export function DocSnippet({ sym, directive, lang, commit, params }: DocSnippetP
     );
   }
   if (directive === 'codebase-commit-walk') {
-    return <CommitWalkWidget title={params?.title} stepsJSON={params?.steps} />;
+    return (
+      <CommitWalkWidget
+        title={params?.title}
+        stepsJSON={params?.steps}
+        commit={params?.commit}
+        from={params?.from}
+        to={params?.to}
+      />
+    );
   }
   if (directive === 'codebase-file') {
+    if (text) return <Code text={text} language={lang || 'text'} />;
     return <DocFileSnippet path={params?.path ?? ''} range={params?.range} language={lang} />;
   }
   if (directive === 'codebase-signature') return <DocSignature sym={sym} commit={commit} language={lang} />;

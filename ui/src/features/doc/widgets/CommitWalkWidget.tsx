@@ -18,9 +18,12 @@ export interface CommitWalkStep {
 interface CommitWalkWidgetProps {
   title?: string;
   stepsJSON?: string;
+  commit?: string;
+  from?: string;
+  to?: string;
 }
 
-export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWalkWidgetProps) {
+export function CommitWalkWidget({ title = 'Commit walk', stepsJSON, commit, from, to }: CommitWalkWidgetProps) {
   const steps = React.useMemo(() => parseSteps(stepsJSON), [stepsJSON]);
   const [index, setIndex] = React.useState(0);
   const current = steps[index];
@@ -85,7 +88,7 @@ export function CommitWalkWidget({ title = 'Commit walk', stepsJSON }: CommitWal
           <h4 style={{ margin: '0 0 4px' }}>{current.title || defaultStepTitle(current)}</h4>
         </header>
         {current.body && <StepNote body={current.body} />}
-        <CommitWalkStepView step={current} />
+        <CommitWalkStepView step={current} defaultCommit={commit} defaultFrom={from} defaultTo={to} />
       </article>
     </section>
   );
@@ -111,8 +114,22 @@ function StepNote({ body }: { body: string }) {
   );
 }
 
-function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
-  const p = step.params ?? {};
+function CommitWalkStepView({
+  step,
+  defaultCommit,
+  defaultFrom,
+  defaultTo,
+}: {
+  step: CommitWalkStep;
+  defaultCommit?: string;
+  defaultFrom?: string;
+  defaultTo?: string;
+}) {
+  const p = { ...(step.params ?? {}) };
+  if (defaultCommit && !p.commit) p.commit = defaultCommit;
+  if (defaultFrom && !p.from) p.from = defaultFrom;
+  if (defaultTo && !p.to) p.to = defaultTo;
+
   switch (step.kind) {
     case 'overview':
     case 'note':
@@ -123,17 +140,6 @@ function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
     case 'changed-files':
     case 'files':
       return <ChangedFilesWidget from={p.from ?? ''} to={p.to ?? ''} />;
-    case 'diff':
-      return <SymbolDiffInlineWidget sym={step.symbolId ?? ''} from={p.from ?? ''} to={p.to ?? ''} />;
-    case 'history': {
-      const limit = p.limit ? Number.parseInt(p.limit, 10) : undefined;
-      return <SymbolHistoryInlineWidget sym={step.symbolId ?? ''} limit={Number.isFinite(limit) ? limit : undefined} />;
-    }
-    case 'impact': {
-      const depth = p.depth ? Number.parseInt(p.depth, 10) : undefined;
-      const dir = p.dir === 'uses' ? 'uses' : 'usedby';
-      return <ImpactInlineWidget sym={step.symbolId ?? ''} dir={dir} depth={Number.isFinite(depth) ? depth : undefined} commit={p.commit} />;
-    }
     case 'symbol':
     case 'annotation':
     case 'snippet':
@@ -146,6 +152,17 @@ function CommitWalkStepView({ step }: { step: CommitWalkStep }) {
           note={p.note}
         />
       );
+    case 'diff':
+      return <SymbolDiffInlineWidget sym={step.symbolId ?? ''} from={p.from ?? ''} to={p.to ?? ''} />;
+    case 'history': {
+      const limit = p.limit ? Number.parseInt(p.limit, 10) : undefined;
+      return <SymbolHistoryInlineWidget sym={step.symbolId ?? ''} limit={Number.isFinite(limit) ? limit : undefined} />;
+    }
+    case 'impact': {
+      const depth = p.depth ? Number.parseInt(p.depth, 10) : undefined;
+      const dir = p.dir === 'uses' ? 'uses' : 'usedby';
+      return <ImpactInlineWidget sym={step.symbolId ?? ''} dir={dir} depth={Number.isFinite(depth) ? depth : undefined} commit={p.commit} />;
+    }
     default:
       return <div data-part="error">Unknown commit walk step kind: <code>{step.kind}</code></div>;
   }
@@ -166,10 +183,10 @@ function defaultStepTitle(step: CommitWalkStep): string {
   if (step.kind === 'note') return 'Note';
   if (step.kind === 'stats' || step.kind === 'diff-stats') return 'Review the size of the change';
   if (step.kind === 'files' || step.kind === 'changed-files') return 'Review changed files';
+  if (step.kind === 'symbol') return 'Inspect symbol';
   if (step.kind === 'diff') return 'Review the symbol diff';
   if (step.kind === 'history') return 'Review symbol history';
   if (step.kind === 'impact') return 'Review impact';
-  if (step.kind === 'symbol') return 'Inspect symbol';
   if (step.kind === 'annotation' || step.kind === 'snippet') return 'Review annotated code';
   return step.kind;
 }

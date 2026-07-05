@@ -30,12 +30,14 @@ func openFixtureDB(t *testing.T) *sql.DB {
 		`INSERT INTO snapshot_refs VALUES ('abcdef123456', 'sym:example.com/demo.func.Helper', 'sym:example.com/demo.func.Hello', 'call', 'file:util.go', 3, 8, 3, 13, 22, 27)`,
 		"INSERT INTO file_contents VALUES ('h2', CAST('package main\n\nfunc Helper() {}\n' AS BLOB))",
 		`CREATE TABLE static_review_rendered_docs (slug TEXT, title TEXT, html TEXT, snippets_json TEXT, errors_json TEXT)`,
+		`CREATE TABLE review_docs (slug TEXT, title TEXT, content TEXT)`,
 		`INSERT INTO commits(hash, short_hash, author_time, error) VALUES ('abcdef123456', 'abcdef1', 1, '')`,
 		`INSERT INTO snapshot_packages VALUES ('abcdef123456', 'pkg:example.com/demo', 'example.com/demo', 'demo', '', 'go')`,
 		`INSERT INTO snapshot_files VALUES ('abcdef123456', 'file:main.go', 'main.go', 'pkg:example.com/demo', 28, 3, 'h1', 'h1', 'go', '[]')`,
 		`INSERT INTO snapshot_symbols VALUES ('abcdef123456', 'sym:example.com/demo.func.Hello', 'func', 'Hello', 'pkg:example.com/demo', 'file:main.go', 3, 1, 3, 15, 14, 28, '', 'func Hello() {}', '', 0, 1, 'go', 'b1')`,
 		"INSERT INTO file_contents VALUES ('h1', CAST('package main\n\nfunc Hello() {}\n' AS BLOB))",
 		`INSERT INTO static_review_rendered_docs VALUES ('intro', 'Intro', '<h1>Intro</h1>', '[]', '[]')`,
+		`INSERT INTO review_docs VALUES ('raw', 'Raw', '# Raw')`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
@@ -137,6 +139,25 @@ func TestLiveServerXrefEndpoints(t *testing.T) {
 	}
 }
 
+func TestResolveCommitSupportsHeadOffsets(t *testing.T) {
+	db := openFixtureDB(t)
+	if _, err := db.Exec(`INSERT INTO commits(hash, short_hash, author_time, error) VALUES ('fedcba654321', 'fedcba6', 2, '')`); err != nil {
+		t.Fatal(err)
+	}
+	s := New(db, "")
+	got, err := s.resolveCommit("HEAD")
+	if err != nil || got != "fedcba654321" {
+		t.Fatalf("HEAD = %q, %v", got, err)
+	}
+	got, err = s.resolveCommit("HEAD~1")
+	if err != nil || got != "abcdef123456" {
+		t.Fatalf("HEAD~1 = %q, %v", got, err)
+	}
+	if _, err := s.resolveCommit("HEAD~9"); err == nil {
+		t.Fatalf("HEAD~9 resolved, want error")
+	}
+}
+
 func TestLiveServerSourceAndReviewDocs(t *testing.T) {
 	h := New(openFixtureDB(t), "").Handler()
 
@@ -158,6 +179,28 @@ func TestLiveServerSourceAndReviewDocs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if doc.HTML != "<h1>Intro</h1>" {
+		t.Fatalf("doc=%+v", doc)
+	}
+}
+
+func TestLiveServerRawReviewDocFallbackUsesContentColumn(t *testing.T) {
+	db := openFixtureDB(t)
+	if _, err := db.Exec(`DROP TABLE static_review_rendered_docs`); err != nil {
+		t.Fatal(err)
+	}
+	h := New(db, "").Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/review-docs/raw", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("review doc code=%d body=%s", w.Code, w.Body.String())
+	}
+	var doc reviewDoc
+	if err := json.Unmarshal(w.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Markdown != "# Raw" {
 		t.Fatalf("doc=%+v", doc)
 	}
 }

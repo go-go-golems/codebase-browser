@@ -11,6 +11,16 @@ import (
 )
 
 func newDBCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "db",
+		Short: "Review database utilities",
+	}
+	cmd.AddCommand(newDBCreateCmd())
+	cmd.AddCommand(newDBValidateCmd())
+	return cmd
+}
+
+func newDBCreateCmd() *cobra.Command {
 	var (
 		dbPath       string
 		repoRoot     string
@@ -21,7 +31,7 @@ func newDBCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "db create",
+		Use:   "create",
 		Short: "Create a review SQLite database from a commit range (no docs)",
 		Long: `Create a review database containing per-commit snapshots.
 
@@ -77,6 +87,9 @@ Examples:
 			for _, idxErr := range result.Errors {
 				fmt.Fprintf(os.Stderr, "  ERROR %s: %v\n", idxErr.Detail, idxErr.Err)
 			}
+			if len(result.Errors) > 0 {
+				return fmt.Errorf("index completed with %d error(s)", len(result.Errors))
+			}
 
 			return nil
 		},
@@ -85,7 +98,7 @@ Examples:
 	cmd.Flags().StringVar(&dbPath, "db", "review.db", "Path to review database")
 	cmd.Flags().StringVar(&repoRoot, "repo-root", ".", "Path to git repository root")
 	cmd.Flags().StringVar(&commitRange, "commits", "", "Git log range spec (e.g. HEAD~10..HEAD)")
-	cmd.Flags().StringArrayVar(&patterns, "patterns", nil, "Go package patterns for extraction")
+	cmd.Flags().StringSliceVar(&patterns, "patterns", nil, "Go package patterns for extraction (repeat flag or comma-separate values)")
 	cmd.Flags().BoolVar(&includeTests, "include-tests", true, "Include test files")
 	cmd.Flags().IntVar(&parallelism, "parallelism", 1, "Max concurrent worktrees for multi-commit indexing")
 

@@ -6,17 +6,17 @@ This example demonstrates a symbol with real history: the `history scan` command
 
 Track how `newScanCmd` evolved across recent indexed commits:
 
-```codebase-symbol-history sym=history.newScanCmd limit=20
+```codebase-symbol-history sym=sym:github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/history.func.newScanCmd limit=20
 ```
 
 ## Body diff: server-runtime cleanup to CI-ready command
 
-```codebase-diff sym=history.newScanCmd from=05f3ffe to=7c095d0
+```codebase-diff sym=sym:github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/history.func.newScanCmd from=05f3ffe to=7c095d0
 ```
 
 ## Impact: who calls newScanCmd?
 
-```codebase-impact sym=history.newScanCmd dir=usedby depth=2
+```codebase-impact sym=sym:github.com/wesen/codebase-browser/cmd/codebase-browser/cmds/history.func.newScanCmd dir=usedby depth=2
 ```
 
 ## Diff stats across recent commits

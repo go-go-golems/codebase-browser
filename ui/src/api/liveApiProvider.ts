@@ -83,13 +83,24 @@ function normalizeIndex(row: any): IndexSummary {
   };
 }
 
+function parseMaybeJSON<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string') return (value as T) ?? fallback;
+  try {
+    return JSON.parse(value || 'null') ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function normalizeDoc(row: any): DocPage {
   return {
     slug: row.slug,
     title: row.title,
     html: row.html ?? row.markdown ?? '',
-    snippets: typeof row.snippetsJson === 'string' ? JSON.parse(row.snippetsJson || '[]') : (row.snippets ?? []),
-    errors: typeof row.errorsJson === 'string' ? JSON.parse(row.errorsJson || '[]') : (row.errors ?? []),
+    snippets: parseMaybeJSON(row.snippetsJson ?? row.snippets, []),
+    errors: parseMaybeJSON(row.errorsJson ?? row.errors, []),
+    blocks: parseMaybeJSON(row.blocksJson ?? row.blocks, []),
+    diagnostics: parseMaybeJSON(row.diagnosticsJson ?? row.diagnostics, []),
   };
 }
 

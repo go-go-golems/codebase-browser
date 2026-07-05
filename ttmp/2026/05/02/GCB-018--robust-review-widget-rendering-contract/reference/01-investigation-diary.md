@@ -1,0 +1,267 @@
+# Investigation Diary: GCB-018 Robust Review Widget Rendering Contract
+
+## Step 1: Ticket creation and design scope
+
+Created GCB-018 after GCB-017 exposed repeated review-widget failures during static export validation. The goal is a clean-cut redesign plan, not compatibility preservation. The system should prefer a simple, explicit, testable widget contract over the current implicit Go-rendered HTML plus React DOM-scanning handoff.
+
+Initial observed failures from GCB-017:
+
+- Short symbol refs such as `staticapp.Export` looked valid but did not resolve to full stable IDs.
+- Runtime widgets accepted invalid commit refs like `HEAD~5` even when only two commits were indexed.
+- Commit-walk child steps did not inherit top-level `from=`/`to=` params.
+- Commit-walk examples referenced step kinds (`overview`, `symbol`) that the React renderer did not implement.
+- `codebase-file` fallback HTML was malformed because raw source text passed through Markdown/HTML parsing.
+- Some widgets showed generic `Failed` or indefinite `Loading…` states with little context.
+
+The design document in `design/01-review-widget-rendering-contract-analysis-and-implementation-guide.md` is intended as an intern-ready architecture guide and implementation plan.
+
+## Step 2: Phase 1 all-widget smoke fixture and script
+
+### What changed
+
+- Added `examples/all-widgets-smoke.md`, a strict all-widget review document that exercises every supported review directive with full `sym:` IDs and a small `HEAD~1..HEAD`-compatible range.
+- Added `scripts/01-review-widget-smoke.sh` to build/use the standalone binary, strict-index the fixture, strict-export it, validate SQLite rendered-doc errors/snippet count, serve the export, and run the browser check if the `playwright` package is installed.
+- Added `scripts/02-review-widget-smoke.mjs`, the Playwright visible-error scan used by the shell script when Playwright is available.
+- Added `make review-widget-smoke` as the convenient entry point.
+- Marked Phase 1 complete in `tasks.md`.
+
+### Validation
+
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+- The smoke script created a strict review DB and strict static export for `examples/all-widgets-smoke.md`.
+- SQLite checks passed: zero rendered-doc errors and at least 11 snippets.
+- Playwright was not available as a local Node package in the repo, so the script correctly skipped the optional browser scan.
+- I manually served the kept smoke export and used the harness Playwright browser to validate the page and all commit-walk steps:
+  - no `doc error`
+  - no `Failed`
+  - no `Unknown`
+  - no `not found`
+  - no `outside this export`
+  - no `Loading…`
+  - no `&#34;`
+  - no paragraph tags inside the `codebase-file` widget
+  - `Resolved 11 snippet(s)`
+
+### Notes
+
+This is Phase 1 of the GCB-018 plan: it freezes expected visible behavior before the deeper clean-cut refactor. Deprecated DOM-scanning/stub code is not removed in this phase; the design intentionally removes it in Phase 6 after the structured page model is implemented.
+
+## Step 3: Phase 2 directive registry foundation
+
+### What changed
+
+- Added `internal/reviewwidgets`, a dependency-free package that defines the supported top-level `codebase-*` directives and supported `codebase-commit-walk` step kinds.
+- Added metadata for each directive:
+  - required params
+  - optional params
+  - commit-ref params
+  - whether the directive requires a symbol or file
+  - short description
+- Added `ValidateParams` and `ValidateStepParams` so renderers and tests no longer need private copies of the directive contract.
+- Wired `internal/docs/renderer.go` through the registry before directive-specific rendering. Unknown directives, missing required params, and unsupported params now fail centrally.
+- Wired commit-walk step parsing through the registry. Unknown step kinds and unsupported step params now fail before React sees them.
+- Added unit tests in `internal/reviewwidgets/schema_test.go` for directive enumeration, required params, unsupported params, unknown directives, and commit-walk step validation.
+
+### Validation
+
+- `GOWORK=off go test ./internal/reviewwidgets ./internal/docs ./internal/review` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed after the renderer started using the registry.
+
+### Notes
+
+This is the first real removal of duplicated/deprecated contract logic: directive/step required-param checks are no longer scattered only inside `internal/docs/renderer.go`. The old HTML stub/DOM hydration path still exists and will be removed after the structured review page model is implemented.
+
+## Step 4: Phase 3 structured page model foundation
+
+### What changed
+
+- Added `internal/reviewwidgets/page_model.go` with a new structured review page model:
+  - `Page`
+  - `Block`
+  - `Diagnostic`
+- Added `BuildPage(slug, mdSource)` that splits review Markdown into ordered blocks:
+  - rendered Markdown blocks (`type=markdown`, `html=...`)
+  - directive widget blocks (`type=widget`, `directive=...`, `props=...`, `body=...`)
+- Added shared directive parsing helpers:
+  - `ParseInfo`
+  - `ParamsFromFields`
+  - `SplitFields`
+- Removed the duplicate private `splitFields` implementation from `internal/docs/renderer.go`; the legacy renderer now uses `reviewwidgets.ParseInfo`, `SplitFields`, and `ParamsFromFields`.
+- Added page-model tests covering:
+  - markdown/widget block ordering
+  - directive diagnostics
+  - commit-walk step diagnostics
+  - quoted param parsing
+
+### Validation
+
+- `GOWORK=off go test ./internal/reviewwidgets ./internal/docs ./internal/review` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+
+### Notes
+
+This phase introduces the future structured representation without switching the browser/export path yet. More deprecated code was removed safely: the renderer no longer owns a private directive-field parser. The next phase should persist this page model into SQLite (`static_review_pages`) while the old `static_review_rendered_docs` path still exists only long enough to compare behavior.
+
+## Step 5: Phase 4 export structured review pages to SQLite
+
+### What changed
+
+- Extended static review export schema with `static_review_pages`:
+  - `slug`
+  - `title`
+  - `blocks_json`
+  - `diagnostics_json`
+  - `rendered_at`
+- Updated `internal/staticapp/reviewdocs.go` so `AddRenderedReviewDocs` builds the structured page model with `reviewwidgets.BuildPage` for every review doc and writes it to `static_review_pages`.
+- In strict mode, structured page diagnostics now fail export before publishing.
+- Kept the legacy `static_review_rendered_docs` write path temporarily so the current frontend continues to work while Phase 5 replaces the reader/renderer.
+- Updated `internal/staticapp/export_test.go` to assert `static_review_pages` is created and contains markdown blocks with empty diagnostics.
+
+### Validation
+
+- `GOWORK=off go test ./internal/staticapp ./internal/reviewwidgets ./internal/docs ./internal/review` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+
+### Notes
+
+This is an intermediate bridge phase. Deprecated `static_review_rendered_docs` and DOM hydration are still present only because the frontend has not switched to `static_review_pages` yet. The next phase should update the sql.js provider and React page renderer to consume `blocks_json`; after that, the legacy rendered-doc table and stub path can be deleted.
+
+## Step 6: Phase 5 structured review-page frontend and old static table removal
+
+### What changed
+
+- Switched the static browser API from `static_review_rendered_docs` to `static_review_pages`:
+  - `listReviewDocs()` now reads `static_review_pages`.
+  - `getReviewDoc()` now reads `blocks_json` and `diagnostics_json`.
+  - Review snippets are loaded from `review_docs` + `review_doc_snippets` and matched to widget blocks by directive order.
+- Rewrote `ui/src/features/review/ReviewDocPage.tsx` to render structured blocks directly:
+  - Markdown blocks render their pre-rendered HTML.
+  - Widget blocks render `DocSnippet` directly.
+  - No `querySelectorAll('[data-codebase-snippet]')`.
+  - No `createPortal`.
+  - No mutation of `innerHTML` to clear fallback stubs.
+- Removed the old `static_review_rendered_docs` creation/write path from `internal/staticapp/reviewdocs.go`.
+- Updated the review-widget smoke script to validate `static_review_pages` diagnostics/blocks instead of the removed table.
+- Updated the Playwright smoke script to fail if review pages contain any legacy `data-codebase-snippet` stubs.
+- Kept the non-review `/doc` page legacy hydration path for now; it is outside the static review page path and should be removed after docs pages are migrated to structured blocks too.
+
+### Validation
+
+- `pnpm -C ui run typecheck` passed.
+- `GOWORK=off go test ./...` passed.
+- `GOWORK=off make build` passed and rebuilt the embedded SPA assets.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed with the new structured DB table.
+- Manual Playwright harness validation of the rebuilt structured smoke export passed:
+  - no `doc error`
+  - no `Failed`
+  - no `Unknown`
+  - no `not found`
+  - no `outside this export`
+  - no `Loading…`
+  - no `&#34;`
+  - no paragraph tags inside the `codebase-file` widget
+  - no legacy `data-codebase-snippet` stubs on the review page
+  - all six commit-walk steps rendered cleanly
+
+### Notes
+
+This is the main GCB-018 cutover for static review pages. Review pages now use an explicit SQLite JSON block model rather than hidden raw-HTML stubs. The remaining deprecated stub code is limited to the older generic docs page path and to `docs.Render`, which still supplies strict symbol/file validation and review snippet indexing until that resolver is split from HTML rendering.
+
+## Step 7: Phase 7 strict commit-ref validation uses the registry
+
+### What changed
+
+- Updated `internal/review/strict_docs.go` to use `reviewwidgets.Lookup` and `reviewwidgets.LookupStep` for commit-ref extraction.
+- Removed the hardcoded strict-docs knowledge that only `commit`, `from`, and `to` might matter.
+- Top-level directives now contribute strict commit refs through their registry `CommitRefKeys`.
+- `codebase-commit-walk` child steps now contribute strict commit refs through each step kind's registry `CommitRefKeys`.
+
+### Validation
+
+- `GOWORK=off go test ./internal/review ./internal/reviewwidgets ./internal/staticapp` passed.
+- `pnpm -C ui run typecheck` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+
+### Notes
+
+This completes the strict-validation parity part of GCB-018 for commit refs: when a future directive or commit-walk step adds a commit-ref parameter, strict validation is updated by changing the central registry, not by hunting through `strict_docs.go`.
+
+## Step 8: Phase 6 remove remaining frontend stub hydration code
+
+### What changed
+
+- Removed the generic `/doc` page's deprecated DOM hydration implementation.
+- Removed frontend imports/uses of `createPortal`, `querySelectorAll('[data-codebase-snippet]')`, `useGetDocQuery`, and `useListDocsQuery` from the active source tree.
+- Removed the sidebar's empty generic `Docs` section; review docs are the supported static documentation surface.
+- Changed `internal/docs.Render` so resolved directives no longer emit raw HTML stubs or source-code fallback HTML.
+  - It still returns `SnippetRef` rows for review indexing and strict validation.
+  - Rendered HTML now contains only an inert resolution marker for directive fences.
+- Updated `internal/docs/renderer_test.go` to assert the deprecated hydration attributes are absent while snippet metadata is preserved.
+- Updated `DocSnippet` comments to describe structured review widget rendering rather than stub hydration.
+
+### Validation
+
+- `GOWORK=off go test ./internal/docs ./internal/review ./internal/staticapp ./internal/reviewwidgets` passed.
+- `pnpm -C ui run typecheck` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+- Active source search confirms no implementation use of the deprecated review/static export table or DOM-scanned hydration path remains.
+
+### Notes
+
+This completes the cleanup the user explicitly asked for: the deprecated review/static-export widget contract is not just bypassed, it has been removed from the active frontend and static export path. `docs.Render` remains as the directive resolver/snippet extractor for indexing, but it no longer produces widget mount stubs.
+
+## Step 9: Phase 8 CI wiring and public docs update
+
+### What changed
+
+- Added `make review-widget-smoke` to the push workflow so CI performs the strict all-widget review export smoke test.
+- Added Node/corepack setup in the push workflow because the smoke test may build the embedded SPA binary when `GCB_SKIP_BUILD` is not set.
+- Updated `pkg/doc/db-reference.md` to document `static_review_pages` instead of the removed `static_review_rendered_docs` table.
+- Clarified that `review_doc_snippets.stub_id` is now a stable snippet key, not an HTML mount-stub contract.
+
+### Validation
+
+- `GOWORK=off go test ./...` passed.
+- `pnpm -C ui run typecheck` passed.
+- `GCB_SKIP_BUILD=1 make review-widget-smoke` passed.
+- Source search shows no active documentation references to `static_review_rendered_docs` outside generated embedded source snapshots.
+
+### Notes
+
+The local smoke script still treats Playwright as optional because the repository does not yet declare a Playwright package dependency. CI now at least guarantees the strict index/export and SQLite-level structured-page smoke. If we want browser-level CI, the next small follow-up is to add Playwright as an explicit UI dev dependency and install browsers in the workflow.
+
+## Step 10: CI failure diagnosis and frontend-build fix
+
+### What failed
+
+GitHub Actions run `25284146811`, job `74125852166`, failed in the `generate assets` step. The important log line was:
+
+```text
+SPA assets missing at /home/runner/work/codebase-browser/codebase-browser/ui/dist/public; run `pnpm -C ui run build` first: stat .../ui/dist/public/index.html: no such file or directory
+```
+
+The workflow ran `go generate ./...` directly. After the portable embedded-SPA work, `internal/staticapp/generate.go` expects `ui/dist/public/index.html` to already exist so it can copy frontend assets into `internal/staticapp/embed/public`. Locally, `make build` works because it runs `frontend-build` before `generate`, but CI was still using the older direct `go generate ./...` sequence.
+
+### Fix
+
+Updated `.github/workflows/push.yml` so the test job now does the frontend setup before `go generate`:
+
+1. `pnpm -C ui install --frozen-lockfile`
+2. `pnpm -C ui run build`
+3. `go generate ./...`
+4. `go test ./...`
+5. `make review-widget-smoke`
+
+### Validation
+
+Locally reproduced the CI sequence successfully:
+
+```bash
+pnpm -C ui install --frozen-lockfile
+pnpm -C ui run build
+GOWORK=off go generate ./...
+GOWORK=off go test ./...
+GCB_SKIP_BUILD=1 make review-widget-smoke
+```
+
+All commands passed.

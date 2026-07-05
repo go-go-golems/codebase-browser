@@ -31,7 +31,7 @@ func Register(root *cobra.Command) error {
 
 The static export remains the canonical shareable artifact, but this command is
 useful for local demos and for consumers that want Go-side /api/* queries instead
-of browser-side sql.js queries.
+of browser-side SQLite queries.
 
 Examples:
   codebase-browser serve --db /tmp/pr-42.db --addr :3001

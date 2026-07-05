@@ -13,13 +13,8 @@ import (
 // LoadLatestSnapshot reconstructs a *browser.Loaded from the most recent
 // commit's snapshot data in the review database.
 func LoadLatestSnapshot(ctx context.Context, store *Store) (*browser.Loaded, error) {
-	var hash string
-	row := store.DB().QueryRowContext(ctx,
-		`SELECT hash FROM commits ORDER BY author_time DESC LIMIT 1`)
-	if err := row.Scan(&hash); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no commits in review database")
-		}
+	hash, err := LatestCommitHash(ctx, store.DB())
+	if err != nil {
 		return nil, fmt.Errorf("find latest commit: %w", err)
 	}
 
@@ -28,16 +23,7 @@ func LoadLatestSnapshot(ctx context.Context, store *Store) (*browser.Loaded, err
 		return nil, fmt.Errorf("load snapshot index: %w", err)
 	}
 
-	data, err := json.Marshal(idx)
-	if err != nil {
-		return nil, fmt.Errorf("marshal snapshot index: %w", err)
-	}
-
-	loaded, err := browser.LoadFromBytes(data)
-	if err != nil {
-		return nil, fmt.Errorf("load browser index: %w", err)
-	}
-	return loaded, nil
+	return browser.LoadIndex(idx), nil
 }
 
 // loadSnapshotIndex rebuilds an *indexer.Index from snapshot_* tables for a single commit.
@@ -153,4 +139,3 @@ func loadSnapshotIndex(ctx context.Context, db *sql.DB, commitHash string) (*ind
 
 	return idx, nil
 }
-

@@ -1,0 +1,111 @@
+version: 2
+project_name: codebase-browser
+
+before:
+  hooks:
+    - go mod tidy
+    # Build the generated source/index/static frontend payloads used by -tags embed.
+    # Keep this scoped through Makefile instead of `go generate ./...` so an
+    # existing internal/sourcefs/embed/source snapshot is not recursively
+    # regenerated during releases.
+    - make generate
+
+builds:
+  - id: codebase-browser-linux
+    main: ./cmd/codebase-browser
+    binary: codebase-browser
+    env:
+      - CGO_ENABLED=1
+      - CC_linux_amd64=gcc
+      - CXX_linux_amd64=g++
+      - CC_linux_arm64=aarch64-linux-gnu-gcc
+      - CXX_linux_arm64=aarch64-linux-gnu-g++
+      - 'CC={{ index .Env (print "CC_" .Os "_" .Arch) }}'
+      - 'CXX={{ index .Env (print "CXX_" .Os "_" .Arch) }}'
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - sqlite_fts5
+      - embed
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+  - id: codebase-browser-darwin
+    main: ./cmd/codebase-browser
+    binary: codebase-browser
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - sqlite_fts5
+      - embed
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+checksum:
+  name_template: checksums.txt
+
+signs:
+  - artifacts: checksum
+    # setup for github actions according to https://goreleaser.com/ci/actions/
+    args: ["--batch", "-u", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign", "${artifact}"]
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+homebrew_casks:
+  - name: codebase-browser
+    binaries:
+      - codebase-browser
+    description: "Turn code reviews into static, shareable SQLite-backed browsers"
+    homepage: "https://github.com/go-go-golems/codebase-browser"
+    repository:
+      owner: go-go-golems
+      name: homebrew-go-go-go
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
+nfpms:
+  - id: packages
+    vendor: GO GO GOLEMS
+    homepage: https://github.com/go-go-golems/codebase-browser
+    maintainer: Manuel Odendahl <wesen@ruinwesen.com>
+    description: |-
+      Turn code reviews into static, shareable SQLite-backed browsers.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    release: "1"
+    section: default
+    priority: extra
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
+
+publishers:
+  - name: fury.io
+    env:
+      - FURY_TOKEN={{ .Env.FURY_TOKEN }}
+    ids:
+      - packages
+    dir: "{{ dir .ArtifactPath }}"
+    cmd: curl -F package=@{{ .ArtifactName }} https://{{ .Env.FURY_TOKEN }}@push.fury.io/go-go-golems/
+
+# modelines, feel free to remove those if you don't want/use them:
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj

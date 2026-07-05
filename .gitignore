@@ -6,6 +6,7 @@ internal/web/embed/public/*
 !internal/web/embed/public/.keep
 internal/sourcefs/embed/source/*
 !internal/sourcefs/embed/source/.keep
+internal/staticapp/embed/public/*
 internal/indexfs/embed/index.json
 internal/indexfs/embed/index-ts.json
 internal/sqlite/embed/codebase.db
@@ -38,3 +39,11 @@ pnpm-debug.log*
 dist/
 .tools/
 .playwright-mcp/
+
+# Large local investigation databases
+/glazed-full.db
+/glazed.db
+*.db-shm
+*.db-wal
+
+/glazed-full-gcb025.db

@@ -8,7 +8,7 @@ import { PackagePage } from '../features/tree/PackagePage';
 import { SymbolPage } from '../features/symbol/SymbolPage';
 import { SourcePage } from '../features/source/SourcePage';
 import { SearchPanel } from '../features/tree/SearchPanel';
-import { DocPage, DocList } from '../features/doc/DocPage';
+import { DocPage } from '../features/doc/DocPage';
 import { ReviewDocPage, ReviewDocList } from '../features/review/ReviewDocPage';
 import { HistoryPage } from '../features/history/HistoryPage';
 import { useGetIndexQuery } from '../api/indexApi';
@@ -30,10 +30,6 @@ export function App() {
               </Link>
             </div>
             <ReviewDocList />
-            <details open style={{ marginBottom: 12 }}>
-              <summary style={{ cursor: 'pointer', fontWeight: 600, padding: '4px 0' }}>Docs</summary>
-              <DocList />
-            </details>
             <PackageTree />
           </aside>
           <main data-part="main">

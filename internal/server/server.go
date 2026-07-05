@@ -1,6 +1,6 @@
 // Package server provides the live Go HTTP API for codebase-browser SQLite
-// databases. It is intentionally independent from the static sql.js runtime:
-// callers can point it at the same review database and query it through /api/*.
+// databases. The browser does not open SQLite directly; callers point the server
+// at a review database and query it through /api/*.
 package server
 
 import (
