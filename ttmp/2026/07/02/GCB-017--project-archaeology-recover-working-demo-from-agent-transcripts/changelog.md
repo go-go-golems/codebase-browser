@@ -148,3 +148,15 @@ Rebuilt the no-sql.js demo, pushed yolo image ghcr.io/go-go-golems/codebase-brow
 - /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/codebase-browser/deployment.yaml — Updated yolo image tag to no-sqljs build
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/public/sql-wasm.wasm — Removed public sql-wasm artifact
 
+
+## 2026-07-05
+
+Merged current main into the no-sql.js live-demo branch, kept the hard live-server cutover, removed the remaining public sql-wasm-browser artifact, aligned smoke checks with static_review_pages, and validated the combined branch.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/.github/workflows/publish-image.yaml — Builds/exports bin/static before Docker build and smoke-checks missing sql-wasm artifacts
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/Makefile — docs/demo smoke targets now validate static_review_pages diagnostics
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/internal/staticapp/export.go — Live-server export message and manifest runtime contract
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/public/sql-wasm-browser.wasm — Removed remaining tracked public sql.js wasm artifact
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/reference/01-diary.md — Step 16 merge-resolution diary

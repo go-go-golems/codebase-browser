@@ -1365,3 +1365,87 @@ The final public deployment is the backend-only browser runtime: the server stil
 - Final image: `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-no-sqljs`.
 - Final GitOps commit: `edd12c9c7d0b2344fe7b4ce257669709017864a8`.
 - Final public health endpoint: `https://codebase-browser.yolo.scapegoat.dev/api/health`.
+
+## Step 16: Resolve main merge conflicts with a hard live-server cutover
+
+This step finished the PR conflict resolution after merging current `origin/main` into the no-sql.js live-demo branch. I kept the hard cutover: exported review bundles are now live-server bundles, the React app keeps using `/api/*`, and browser-side SQLite/sql.js artifacts are removed rather than preserved for backwards compatibility.
+
+The merge also pulled in newer mainline review/indexing work, including structured review pages. I adapted the smoke checks and export validation to that newer `static_review_pages` schema so the combined branch tests the behavior it now actually ships.
+
+### Prompt Context
+
+**User prompt (verbatim):** "Continue keeping a diary and committing at appropriate intervals."
+
+**Assistant interpretation:** Continue resolving the PR merge/review work, record the implementation path in the diary, validate the result, and commit at useful checkpoints.
+
+**Inferred user intent:** Keep the PR branch reviewable and resumable while finishing conflict resolution without losing the no-sql.js/live-server direction.
+
+**Commit (code):** 45fb73cc7841b863b187a5887d9ce3772d238c6e — "Merge main and keep live Go demo runtime"
+
+### What I did
+- Completed the merge-conflict resolution against current `origin/main` and committed the merge.
+- Kept the backend-only React API slices and live `codebase-browser serve` runtime instead of restoring static sql.js provider code.
+- Kept the Docker runtime as a Go server image that copies `bin/codebase-browser` and `bin/static`, and kept the publish workflow building/exporting `bin/static` before Docker build.
+- Deleted the remaining tracked public SQLite wasm artifact `ui/public/sql-wasm-browser.wasm`.
+- Strengthened CI/smoke checks so they verify both `sql-wasm.wasm` and `sql-wasm-browser.wasm` are absent.
+- Updated `Makefile` smoke checks from legacy `static_review_rendered_docs.errors_json` to the newer `static_review_pages.diagnostics_json` schema.
+- Ran `make build`, `make docs-smoke`, `go test ./... -count=1`, `make demo-solid`, `make demo-serve`, and `make demo-smoke` successfully.
+
+### Why
+- PR review correctly pointed out that Docker must not copy `bin/static` unless the workflow creates it first, and that exported bundles must explicitly require the live Go server if the static sql.js provider is removed.
+- The user explicitly approved a hard cutover, so preserving the old browser SQLite execution path would have reintroduced the exact runtime behavior this ticket is removing.
+- The merge brought in the structured review-page schema, so keeping old smoke queries would produce false failures even though the export itself was correct.
+
+### What worked
+- `make build` regenerated embedded SPA assets and produced `bin/codebase-browser` with the live-server export message.
+- `make docs-smoke` passed after the schema check was updated.
+- `go test ./... -count=1` passed, including generated `internal/sourcefs/embed/source/...` packages.
+- `make demo-solid` rebuilt the 118-commit demo with 5 docs, 24 snippets, and zero rendered review diagnostics.
+- `make demo-smoke` passed against the restarted local live server with 118 commits and 117 `main` history rows.
+
+### What didn't work
+- The first post-build `make docs-smoke` failed because the Makefile still queried the old rendered-doc table:
+  - `Error: in prepare, no such table: static_review_rendered_docs`
+  - `make: *** [Makefile:116: docs-smoke] Error 1`
+- `docmgr task list --ticket GCB-017` now fails because merging main introduced another historical `GCB-017` ticket:
+  - `Error: failed to load tasks from file: failed to resolve tasks file: ambiguous ticket index doc for GCB-017 (got 2)`
+- The working tree still has unrelated untracked local artifacts:
+  - `.bin/`
+  - `ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/archive/`
+
+### What I learned
+- Current mainline exports structured review pages into `static_review_pages`, while the live server still supports legacy `static_review_rendered_docs` for older DBs.
+- `ui/public/sql-wasm-browser.wasm` survived the earlier sql.js removal because it came from the merged main branch, not from the original no-sql.js branch state.
+- `make docs-smoke` only rebuilds the binary if `bin/codebase-browser` is missing, so after code changes `make build` must be run explicitly before trusting the smoke output.
+
+### What was tricky to build
+- The conflict resolution combined two intentional changes that look contradictory from the old product model: main had improved static/browser export machinery, while this ticket removes browser-side DB execution. The correct resolution was not to preserve both execution modes, but to keep main's indexing/review-schema improvements while changing the export contract to a live-server bundle.
+- The symptom of the schema mismatch was a smoke-test failure after a successful export. The fix was to align the validation query with `static_review_pages.diagnostics_json`, which is the table `internal/staticapp/reviewdocs.go` now writes.
+
+### What warrants a second pair of eyes
+- Review the hard runtime contract across `cmd/codebase-browser/cmds/review/export.go`, `internal/staticapp/export.go`, `internal/staticapp/manifest.go`, `Dockerfile`, and `.github/workflows/publish-image.yaml` to confirm no static/sql.js expectation remains.
+- Review `internal/server/api_review.go` fallback order and response normalization because it now supports `static_review_pages`, `static_review_rendered_docs`, and raw `review_docs`.
+- Review the merge commit carefully: it includes many mainline additions plus local conflict resolutions, so it is larger than a normal feature commit.
+
+### What should be done in the future
+- Resolve the duplicate `GCB-017` docmgr ticket ambiguity, either by renumbering/aliasing one ticket or by using path-targeted docmgr operations for this ticket.
+- Push the merge commit and respond to the PR review comments with the validation commands and the hard-cutover rationale.
+- Consider adding a browser-network smoke test that fails on any request for `db/codebase.db`, `sql-wasm.wasm`, or `sql-wasm-browser.wasm` in live mode.
+
+### Code review instructions
+- Start at `Dockerfile` and `.github/workflows/publish-image.yaml` to verify `bin/static` is generated before Docker build and that the image serves via `codebase-browser serve`.
+- Then inspect `ui/src/api/codebaseProvider.ts` and the API slices under `ui/src/api/` to confirm the browser only uses `LiveApiProvider`.
+- Then inspect `internal/staticapp/export.go`, `internal/staticapp/reviewdocs.go`, and `internal/server/api_review.go` for the live-server bundle contract and review-doc fallback behavior.
+- Validate with:
+  - `make build`
+  - `make docs-smoke`
+  - `go test ./... -count=1`
+  - `make demo-solid`
+  - `make demo-serve`
+  - `make demo-smoke`
+
+### Technical details
+- Merge commit: `45fb73cc7841b863b187a5887d9ce3772d238c6e`.
+- Canonical demo range remained `025e4c6..79af1b0`.
+- The successful `make demo-solid` run reported `118 commits`, `5 docs`, `24 snippets`, and `0 rendered review errors`.
+- The successful `make demo-smoke` run reported `118 commits`, `117 main history rows`, and `0 rendered review errors`.
