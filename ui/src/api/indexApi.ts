@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { normalizeQueryError, type ProviderError } from './queryErrors';
-import { getSqlJsProvider } from './sqlJsProviderRegistry';
+import { apiProvider } from './codebaseProvider';
 import type { IndexSummary, PackageLite, Symbol } from './types';
 
 const noopBaseQuery: BaseQueryFn<void, unknown, ProviderError> = async () => ({ data: undefined });
@@ -20,19 +20,19 @@ export const indexApi = createApi({
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
     getIndex: b.query<IndexSummary, void>({
-      queryFn: () => providerResult(() => getSqlJsProvider().getIndex()),
+      queryFn: () => providerResult(() => apiProvider().getIndex()),
       providesTags: ['Index'],
     }),
     getPackages: b.query<PackageLite[], void>({
-      queryFn: () => providerResult(() => getSqlJsProvider().getPackageLites()),
+      queryFn: () => providerResult(() => apiProvider().getPackageLites()),
       providesTags: ['Package'],
     }),
     getSymbol: b.query<Symbol, string>({
-      queryFn: (id) => providerResult(() => getSqlJsProvider().getSymbol(id)),
+      queryFn: (id) => providerResult(() => apiProvider().getSymbol(id)),
       providesTags: (_r, _e, id) => [{ type: 'Symbol', id }],
     }),
     searchSymbols: b.query<Symbol[], { q: string; kind?: string }>({
-      queryFn: ({ q, kind }) => providerResult(() => getSqlJsProvider().searchSymbols(q, kind ?? '')),
+      queryFn: ({ q, kind }) => providerResult(() => apiProvider().searchSymbols(q, kind ?? '')),
     }),
   }),
 });

@@ -64,21 +64,27 @@ jobs:
             --repo-root . \
             --strict-docs
 
-      - name: Smoke test static review export
+      - name: Smoke test live review export
         run: |
-          python3 -m http.server 8080 --directory bin/static &
+          ./bin/codebase-browser serve --addr :8080 --db bin/static/db/codebase.db --static-dir bin/static &
           pid=$!
           trap 'kill $pid || true' EXIT
+          ready=0
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8080/manifest.json >/dev/null; then
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
+              ready=1
               break
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8080/ | grep -q 'Codebase Browser'
-          curl -fsS http://127.0.0.1:8080/manifest.json | grep -q 'codebase-browser-sqljs-static-export'
-          curl -fsS http://127.0.0.1:8080/db/codebase.db >/dev/null
-          curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
+          test "$ready" = "1"
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
+          curl -fsS http://127.0.0.1:8080/api/health | grep -q 'live-go'
+          curl -fsS http://127.0.0.1:8080/api/review-docs >/dev/null
+          if find bin/static -name 'sql-wasm*.wasm' -print -quit | grep -q .; then
+            echo "sql-wasm artifact should not be present in bin/static"
+            exit 1
+          fi
 
       - name: Define image metadata
         run: |
@@ -128,16 +134,18 @@ jobs:
         run: |
           docker run -d --rm --name codebase-browser-ci -p 127.0.0.1:8080:8080 "${GHCR_IMAGE}:${SHORT_SHA}"
           trap 'docker logs codebase-browser-ci || true; docker rm -f codebase-browser-ci || true' EXIT
+          ready=0
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8080/manifest.json >/dev/null; then
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
+              ready=1
               break
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8080/ | grep -q 'Codebase Browser'
-          curl -fsS http://127.0.0.1:8080/manifest.json | grep -q 'codebase-browser-sqljs-static-export'
-          curl -fsS http://127.0.0.1:8080/db/codebase.db >/dev/null
-          curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
+          test "$ready" = "1"
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
+          curl -fsS http://127.0.0.1:8080/api/health | grep -q 'live-go'
+          curl -fsS http://127.0.0.1:8080/api/review-docs >/dev/null
 
   gitops-pr:
     name: Open GitOps PR

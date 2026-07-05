@@ -1,13 +1,13 @@
 # codebase-browser
 
-Turn a code review into a static, shareable browser. `codebase-browser` indexes a commit range, source files, symbols, references, and markdown review notes into a SQLite database. Then `review export` packages a React application and that SQLite database into a standalone directory. The browser opens `db/codebase.db` locally with [sql.js](https://sql.js/) — no Go server, no runtime API calls.
+Turn a code review into a live, shareable browser. `codebase-browser` indexes a commit range, source files, symbols, references, and markdown review notes into a SQLite database. Then `review export` packages a React application and that SQLite database into a directory served by `codebase-browser serve`. The browser calls the Go `/api/*` runtime; it does not open SQLite directly.
 
 Reviewers can read prose, inspect symbol diffs, follow callers and callees, browse source files, and query the same database with SQL or an LLM.
 
 ## Why
 
-- **Static, shareable artifacts.** Export a directory anyone can serve with any static file server. No Go process at read time.
-- **SQLite as the runtime boundary.** The indexer writes SQLite; the browser reads SQLite; an LLM reads the same SQLite file. One artifact for human and machine consumers.
+- **Live, shareable artifacts.** Export a directory that `codebase-browser serve` can publish as a single review application.
+- **SQLite as the server-side runtime boundary.** The indexer writes SQLite; the Go API reads SQLite; an LLM can inspect the same SQLite file. One artifact feeds human and machine consumers.
 - **Symbol-level diffs and history.** Instead of reviewing only file-level patches, embed symbol-level diffs, impact graphs, and history timelines directly in prose review guides.
 - **Review guides as markdown.** Write review notes in markdown with special fenced blocks that become interactive widgets in the exported browser.
 
@@ -83,17 +83,20 @@ EOF
   --parallelism 4 \
   --db /tmp/pr-42.db
 
-# 5) Export a static browser bundle
+# 5) Export a live-server browser bundle
 ./bin/codebase-browser review export \
   --db /tmp/pr-42.db \
-  --out /tmp/pr-42-static
+  --out /tmp/pr-42-export
 
-# 6) Serve with any static file server
-python3 -m http.server 8784 --directory /tmp/pr-42-static
+# 6) Serve through the live Go API
+./bin/codebase-browser serve \
+  --addr :8784 \
+  --db /tmp/pr-42-export/db/codebase.db \
+  --static-dir /tmp/pr-42-export
 # open http://localhost:8784/#/
 ```
 
-The exported browser loads `manifest.json`, opens `db/codebase.db` with sql.js, and answers code navigation questions locally. There is no Go runtime server and no `/api/*` requests.
+The exported browser loads the SPA assets and sends data requests to `/api/*`. The Go server opens `db/codebase.db` and answers code navigation, source, xref, history, impact, and review-document queries.
 
 ## Architecture
 
@@ -101,16 +104,13 @@ The exported browser loads `manifest.json`, opens `db/codebase.db` with sql.js, 
 Git commit range ──▶ indexer (Go) ──▶ SQLite review DB
                                      │
                                      ▼
-                    review export ──▶ static directory
+                    review export ──▶ live-server bundle
                                         ├── index.html
                                         ├── manifest.json
-                                        ├── db/codebase.db   ◀── browser opens with sql.js
-                                        └── WASM assets
+                                        └── db/codebase.db   ◀── Go server opens this file
 ```
 
-The exported directory is a static React SPA. No Go server runs at read time.
-Query engine is `sql.js` (SQLite compiled to WebAssembly). All data requests
-go to the local SQLite file, not to `/api/*` endpoints.
+The exported directory is a React SPA plus SQLite database. A Go server runs at read time and owns all SQLite access. All browser data requests go to `/api/*` endpoints.
 
 For documentation on writing review guides, run:
 
@@ -138,13 +138,13 @@ cmd/build-ts-index/       Dagger orchestrator for the Node TS extractor
 internal/indexer/         Go AST → Index JSON + Merge
 internal/browser/         Index loader shared by CLI and indexing paths
 internal/review/          Git/review document indexing into SQLite
-internal/staticapp/       Standalone sql.js export packaging
+internal/staticapp/       Live-server export packaging
 internal/sourcefs/        Source tree embed (for snippet slicing)
 internal/indexfs/         index.json embed + go:generate wiring
 internal/docs/            Markdown renderer + embedded doc pages
 internal/history/         Git-aware history: per-commit snapshots, diffs
 tools/ts-indexer/         Node + TS Compiler API extractor
-ui/                       React SPA (RTK-Query + Storybook, sql.js browser layer)
+ui/                       React SPA (RTK Query + live Go API provider)
 pkg/doc/                   Glazed help pages (user-guide, db-reference, markdown-block-reference)
 ttmp/                      Ticket workspaces (docmgr)
 ```
@@ -171,6 +171,7 @@ Help pages embedded in the binary (run `./bin/codebase-browser help <topic>`):
 
 Tickets and design docs live under `ttmp/`:
 
-- **GCB-015** — static sql.js browser implementation.
-- **GCB-014** — architecture redesign from embedded-index to sql.js export.
+- **GCB-017** — live demo recovery and backend-only frontend runtime.
+- **GCB-015** — earlier static sql.js browser implementation.
+- **GCB-014** — earlier architecture redesign from embedded-index to browser-side SQLite export.
 - **GCB-001** — original design and 10-phase implementation plan.

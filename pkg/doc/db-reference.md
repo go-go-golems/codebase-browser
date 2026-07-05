@@ -25,7 +25,7 @@ Two separate DB paths matter:
 | DB | Produced by | Use |
 |----|-------------|-----|
 | **Source DB** | `review index` or `review db create` | Query with `sqlite3`, hand to an LLM, or use as input to `review export` |
-| **Export DB** (`db/codebase.db`) | `review export` (copies and enriches the source DB) | The static browser opens this file with sql.js. Contains `static_review_pages` with structured markdown/widget blocks. |
+| **Export DB** (`db/codebase.db`) | `review export` (copies and enriches the source DB) | The live Go server opens this file. Contains `static_review_pages` with structured markdown/widget blocks. |
 
 `review export` copies the source DB to `db/codebase.db` in the output directory, then writes `static_review_pages` rows into the output DB. The source DB is never modified.
 

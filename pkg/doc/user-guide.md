@@ -1,7 +1,7 @@
 ---
-Title: "Writing Static Code Review Guides"
+Title: "Writing Live Code Review Guides"
 Slug: "user-guide"
-Short: "How to write markdown review guides and export them as a static sql.js codebase browser."
+Short: "How to write markdown review guides and export them as a live Go API codebase browser."
 Topics:
 - code-review
 - markdown
@@ -49,19 +49,21 @@ codebase-browser review index \
   --docs ./reviews/pr-42.md \
   --db ./reviews/pr-42.db
 
-# 3. Export a static browser bundle
+# 3. Export a live-server browser bundle
 codebase-browser review export \
   --db ./reviews/pr-42.db \
-  --out ./reviews/pr-42-static
+  --out ./reviews/pr-42-export
 
-# 4. Serve the directory with any static file server
-cd ./reviews/pr-42-static
-python3 -m http.server 3002
+# 4. Serve the export through the live Go API
+codebase-browser serve \
+  --addr :3002 \
+  --db ./reviews/pr-42-export/db/codebase.db \
+  --static-dir ./reviews/pr-42-export
 
 # 5. Open http://localhost:3002/#/review/pr-42 in a browser
 ```
 
-The exported browser loads `manifest.json`, opens `db/codebase.db` with `sql.js`, and queries SQLite locally. There is no Go runtime server and no `/api/*` application API in the static runtime.
+The exported browser loads the SPA assets and sends data requests to `/api/*`. The Go server opens `db/codebase.db` and owns all SQLite access.
 
 ## Writing review markdown files
 
@@ -234,7 +236,7 @@ Add `--strict-docs` to `review index` or `review export` in CI when unresolved `
 | **0 snippets resolved** | Directives reference symbols that are not in the DB | Query the DB to find full IDs: `sqlite3 review.db "SELECT DISTINCT stable_id FROM symbols"` |
 | **Missing packages in index** | Default `--patterns` only covers `./cmd/...` and `./internal/...` | Pass `--patterns` explicitly: `--patterns ./...,./pkg/...` |
 | Export shows no review docs | No docs in DB | Run `review index` with `--docs` before `review export` |
-| Browser cannot load sql.js | WASM asset missing from export | Confirm `sql-wasm.wasm` and `sql-wasm-browser.wasm` exist in the export root |
+| Browser cannot load data | Live server is not running or cannot open the DB | Start `codebase-browser serve --db ./reviews/pr-42-export/db/codebase.db --static-dir ./reviews/pr-42-export` and check `/api/health` |
 | Diff widget shows no changes | `from` and `to` commits have same `body_hash` | Check commit range |
 
 ## See Also

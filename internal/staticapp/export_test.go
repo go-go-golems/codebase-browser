@@ -31,7 +31,7 @@ func TestExportCopiesDBWritesManifestAndOmitsLegacyRuntimeFiles(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(outDir, "db", "codebase.db")); err != nil {
 		t.Fatalf("db/codebase.db not copied: %v", err)
 	}
-	for _, legacy := range []string{"precomputed.json", "search.wasm", "wasm_exec.js"} {
+	for _, legacy := range []string{"precomputed.json", "search.wasm", "wasm_exec.js", "sql-wasm.wasm", "sql-wasm-browser.wasm"} {
 		if _, err := os.Stat(filepath.Join(outDir, legacy)); err == nil {
 			t.Fatalf("legacy runtime file %s should not be exported", legacy)
 		} else if !os.IsNotExist(err) {
@@ -53,7 +53,7 @@ func TestExportCopiesDBWritesManifestAndOmitsLegacyRuntimeFiles(t *testing.T) {
 	if manifest.DB.Path != "db/codebase.db" {
 		t.Fatalf("manifest db path = %q", manifest.DB.Path)
 	}
-	if manifest.Runtime.QueryEngine != "sql.js" || manifest.Runtime.HasGoRuntimeServer {
+	if manifest.Runtime.QueryEngine != "live-go-api" || !manifest.Runtime.HasGoRuntimeServer || manifest.Runtime.RequiresStaticHTTPServer {
 		t.Fatalf("unexpected runtime manifest: %+v", manifest.Runtime)
 	}
 	if manifest.DB.HistorySchemaVersion != "3" || manifest.DB.ReviewSchemaVersion != "2" {
@@ -141,9 +141,6 @@ func writeFakeSPABuild(t *testing.T, root string) {
 	}
 	if err := os.WriteFile(filepath.Join(public, "index.html"), []byte("<div id=\"root\"></div>"), 0o644); err != nil {
 		t.Fatalf("write fake index: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(public, "sql-wasm.wasm"), []byte("wasm"), 0o644); err != nil {
-		t.Fatalf("write fake sql wasm: %v", err)
 	}
 }
 

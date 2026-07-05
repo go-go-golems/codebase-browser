@@ -33,7 +33,7 @@ The database contains:
   - Per-commit snapshots (commits, snapshot_symbols, snapshot_files, snapshot_refs)
   - Review documents (review_docs, review_doc_snippets)
 
-This is the input for 'review export', which packages a static sql.js browser.
+This is the input for 'review export', which packages a live-server browser bundle.
 
 For multi-commit ranges, review indexing automatically uses git worktrees so
 source, symbol, reference, and body-hash snapshots match each commit. A single

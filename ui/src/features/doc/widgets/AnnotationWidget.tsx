@@ -1,5 +1,4 @@
-import React from 'react';
-import { getSqlJsProvider } from '../../../api/sqlJsProviderRegistry';
+import { useGetSnippetQuery } from '../../../api/sourceApi';
 
 interface AnnotationWidgetProps {
   sym: string;
@@ -10,26 +9,11 @@ interface AnnotationWidgetProps {
 }
 
 export function AnnotationWidget({ sym, commit, lines, note }: AnnotationWidgetProps) {
-  const [text, setText] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const { data: text, isLoading, error } = useGetSnippetQuery({ sym, kind: 'declaration', commit: commit ?? 'HEAD' }, { skip: !sym });
 
-  React.useEffect(() => {
-    let cancelled = false;
-    getSqlJsProvider()
-      .getSnippet(sym, 'declaration', commit ?? 'HEAD')
-      .then((snippet) => {
-        if (!cancelled) setText(snippet);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sym, commit]);
-
-  if (error) return <div data-part="error">Failed to load annotation snippet: {error}</div>;
-  if (text === null) return <pre data-part="code-block"><code>Loading annotation…</code></pre>;
+  if (!sym) return <div data-part="error">Missing annotation symbol.</div>;
+  if (error) return <div data-part="error">Failed to load annotation snippet: {JSON.stringify(error)}</div>;
+  if (isLoading || text === undefined) return <pre data-part="code-block"><code>Loading annotation…</code></pre>;
 
   const highlight = parseLineSpec(lines);
   const sourceLines = text.split('\n');

@@ -3,4 +3,5 @@
 !.dockerignore
 !bin/
 !bin/codebase-browser
+!bin/static/
 !bin/static/**

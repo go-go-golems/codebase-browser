@@ -22,9 +22,9 @@ CREATE TABLE IF NOT EXISTS static_review_pages (
 );
 `
 
-// AddRenderedReviewDocs renders review markdown into HTML and stores the result
-// inside the exported SQLite database. This keeps markdown/directive resolution
-// in Go while making the static browser read review pages through sql.js.
+// AddRenderedReviewDocs renders review markdown into structured blocks and stores
+// the result inside the exported SQLite database. This keeps markdown/directive
+// resolution in Go while the live server exposes review pages through /api/*.
 func AddRenderedReviewDocs(ctx context.Context, dbPath, repoRoot string, strict bool) error {
 	store, err := review.Open(dbPath)
 	if err != nil {

@@ -17,12 +17,12 @@ func newExportCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export a review database to a standalone sql.js static directory",
-		Long: `Export a review database to a standalone static directory.
+		Short: "Export a review database to a live-server bundle",
+		Long: `Export a review database to a bundle served by codebase-browser serve.
 
-The exported app has no Go runtime server. It contains the built React SPA,
-a manifest, the sql.js WASM runtime, and the SQLite database at db/codebase.db.
-The browser opens that database directly with sql.js.
+The exported directory contains the built React SPA, a manifest, and the SQLite
+database at db/codebase.db. The browser does not open the database directly;
+interactive data flows through the live Go /api/* server.
 
 The export requires a review database produced by 'review index' or 'review db create'.
 

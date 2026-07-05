@@ -1,13 +1,13 @@
-# Static sql.js runtime
+# Live Go API runtime
 
-The review browser is a static application. Exporting a review copies the Vite
-bundle, writes `manifest.json`, and places the SQLite artifact at
+The review browser is served by `codebase-browser serve`. Exporting a review copies
+the Vite bundle, writes `manifest.json`, and places the SQLite artifact at
 `db/codebase.db`.
 
-At runtime the browser loads `manifest.json`, opens `db/codebase.db` with
-sql.js, and answers navigation, source, xref, history, impact, and review-doc
-queries directly in the browser. There is no Go HTTP server in the exported
-runtime.
+At runtime the browser calls `/api/*` endpoints exposed by the Go server. The Go
+server opens `db/codebase.db` and answers navigation, source, xref, history,
+impact, and review-document queries. The browser does not import sql.js and does
+not open the SQLite database directly.
 
 Useful implementation entry points:
 
@@ -17,5 +17,5 @@ Useful implementation entry points:
 ```codebase-signature sym=sym:github.com/wesen/codebase-browser/internal/staticapp.func.AddRenderedReviewDocs
 ```
 
-```codebase-signature sym=sym:ui/src/api/sqlJsQueryProvider.func.getSqlJsProvider
+```codebase-signature sym=sym:github.com/wesen/codebase-browser/internal/server.func.New
 ```

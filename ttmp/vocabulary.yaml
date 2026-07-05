@@ -95,10 +95,18 @@ topics:
       description: Review markdown documents and rendered review guides
     - slug: static-export
       description: Standalone static export bundles and static runtime behavior
-    - slug: frontend
-      description: Frontend browser application code, UI runtime behavior, and client-side data fetching.
-    - slug: sqljs
-      description: sql.js SQLite WebAssembly runtime used by static browser exports.
+    - slug: go-minitrace
+      description: Analysis of agent transcripts using go-minitrace archives and queries
+    - slug: transcript-analysis
+      description: Mining and summarizing agent transcript history
+    - slug: project-archeology
+      description: Reconstructing project history and decisions from prior artifacts
+    - slug: demo-recovery
+      description: Recovering or validating a working project demo path
+    - slug: frontend-runtime
+      description: Frontend runtime architecture and browser data execution model
+    - slug: live-go-api
+      description: Live Go HTTP API used by browser UI
 docTypes:
     - slug: index
       description: Ticket index document

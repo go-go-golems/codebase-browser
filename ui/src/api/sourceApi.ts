@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { normalizeQueryError, type ProviderError } from './queryErrors';
-import { getSqlJsProvider } from './sqlJsProviderRegistry';
+import { apiProvider } from './codebaseProvider';
 
 export type SnippetKind = 'declaration' | 'body' | 'signature';
 
@@ -54,20 +54,24 @@ export const sourceApi = createApi({
   baseQuery: noopBaseQuery,
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
-    getSource: b.query<string, string>({
-      queryFn: (path) => providerResult(() => getSqlJsProvider().getSource(path)),
+    getSource: b.query<string, string | { path: string; commit?: string }>({
+      queryFn: (arg) => {
+        const path = typeof arg === 'string' ? arg : arg.path;
+        const commit = typeof arg === 'string' ? undefined : arg.commit;
+        return providerResult(() => apiProvider().getSource(path, commit));
+      },
     }),
-    getSnippet: b.query<string, { sym: string; kind?: SnippetKind }>({
-      queryFn: ({ sym, kind = 'declaration' }) => providerResult(() => getSqlJsProvider().getSnippet(sym, kind)),
+    getSnippet: b.query<string, { sym: string; kind?: SnippetKind; commit?: string }>({
+      queryFn: ({ sym, kind = 'declaration', commit }) => providerResult(() => apiProvider().getSnippet(sym, kind, commit)),
     }),
     getSnippetRefs: b.query<SnippetRefView[], string>({
-      queryFn: (sym) => providerResult(() => getSqlJsProvider().getSnippetRefs(sym)),
+      queryFn: (sym) => providerResult(() => apiProvider().getSnippetRefs(sym)),
     }),
     getSourceRefs: b.query<SourceRefView[], string>({
-      queryFn: (path) => providerResult(() => getSqlJsProvider().getSourceRefs(path)),
+      queryFn: (path) => providerResult(() => apiProvider().getSourceRefs(path)),
     }),
     getFileXref: b.query<FileXrefResponse, string>({
-      queryFn: (path) => providerResult(() => getSqlJsProvider().getFileXref(path)),
+      queryFn: (path) => providerResult(() => apiProvider().getFileXref(path)),
     }),
   }),
 });

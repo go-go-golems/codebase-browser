@@ -15,11 +15,11 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const manifestKind = "codebase-browser-sqljs-static-export"
+const manifestKind = "codebase-browser-live-export"
 
-// Options controls the static-only sql.js export. The Go binary is an offline
-// packager here: it copies a fully indexed SQLite DB next to the SPA and writes
-// enough boot metadata for the browser to open that DB with sql.js.
+// Options controls the live-server export. The Go binary copies a fully indexed
+// SQLite DB next to the SPA and writes enough boot metadata for codebase-browser
+// serve to expose that DB through the live /api/* runtime.
 type Options struct {
 	DBPath           string
 	OutDir           string
@@ -29,7 +29,7 @@ type Options struct {
 	StrictDocs       bool
 }
 
-// Export writes a static sql.js application bundle to Options.OutDir.
+// Export writes a SPA plus SQLite database bundle to Options.OutDir.
 func Export(ctx context.Context, opts Options) error {
 	if opts.DBPath == "" {
 		return fmt.Errorf("DBPath is required")
@@ -91,7 +91,7 @@ func Export(ctx context.Context, opts Options) error {
 	fmt.Fprintf(os.Stderr, "Wrote manifest.json\n")
 	fmt.Fprintf(os.Stderr, "Copied SQLite DB to %s\n", dbOutPath)
 	fmt.Fprintf(os.Stderr, "\nExport complete: %s\n", opts.OutDir)
-	fmt.Fprintf(os.Stderr, "Serve %s with a static file server and open /#/ in a browser\n", opts.OutDir)
+	fmt.Fprintf(os.Stderr, "Serve with: codebase-browser serve --db %s --static-dir %s\n", dbOutPath, opts.OutDir)
 	return nil
 }
 
@@ -144,9 +144,9 @@ func buildManifest(ctx context.Context, opts Options, dbOutPath string) (*Manife
 			Newest: commits.newest,
 		},
 		Runtime: RuntimeManifest{
-			QueryEngine:              "sql.js",
-			RequiresStaticHTTPServer: true,
-			HasGoRuntimeServer:       false,
+			QueryEngine:              "live-go-api",
+			RequiresStaticHTTPServer: false,
+			HasGoRuntimeServer:       true,
 		},
 	}, nil
 }

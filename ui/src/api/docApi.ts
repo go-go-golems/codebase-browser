@@ -1,5 +1,5 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
-import { getSqlJsProvider } from './sqlJsProviderRegistry';
+import { apiProvider } from './codebaseProvider';
 import { normalizeQueryError, type ProviderError } from './queryErrors';
 
 export interface SnippetRef {
@@ -43,6 +43,12 @@ export interface DocPage {
   diagnostics?: ReviewDiagnostic[];
 }
 
+export interface PageMeta {
+  slug: string;
+  title: string;
+  path: string;
+}
+
 export interface ReviewDocMeta {
   slug: string;
   title: string;
@@ -63,13 +69,19 @@ export const docApi = createApi({
   baseQuery: noopBaseQuery,
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
+    listDocs: b.query<PageMeta[], void>({
+      queryFn: async () => ({ data: [] }),
+    }),
+    getDoc: b.query<DocPage, string>({
+      queryFn: (slug) => providerResult(() => apiProvider().getReviewDoc(slug)),
+    }),
     listReviewDocs: b.query<ReviewDocMeta[], void>({
-      queryFn: () => providerResult(() => getSqlJsProvider().listReviewDocs()),
+      queryFn: () => providerResult(() => apiProvider().listReviewDocs()),
     }),
     getReviewDoc: b.query<DocPage, string>({
-      queryFn: (slug) => providerResult(() => getSqlJsProvider().getReviewDoc(slug)),
+      queryFn: (slug) => providerResult(() => apiProvider().getReviewDoc(slug)),
     }),
   }),
 });
 
-export const { useListReviewDocsQuery, useGetReviewDocQuery } = docApi;
+export const { useListDocsQuery, useGetDocQuery, useListReviewDocsQuery, useGetReviewDocQuery } = docApi;
