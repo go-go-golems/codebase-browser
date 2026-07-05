@@ -36,12 +36,21 @@ RelatedFiles:
       Note: DuckDB schema mismatch and fix recorded in diary
     - Path: ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/scripts/archaeology/extract.js
       Note: JS command API issues and fixes recorded in diary
+    - Path: ui/package.json
+      Note: Removed sql.js runtime dependencies
+    - Path: ui/src/api/codebaseProvider.ts
+      Note: Backend-only provider helper after removing sql.js fallback selection
+    - Path: ui/src/api/liveApiProvider.ts
+      Note: Live HTTP provider now covers xref/ref endpoints
+    - Path: ui/src/api/xrefApi.ts
+      Note: Xref slice migrated from sql.js provider to live API
 ExternalSources: []
 Summary: Chronological diary for the GCB-017 go-minitrace transcript archaeology work.
 LastUpdated: 2026-07-02T23:35:00Z
 WhatFor: Use this to resume or review the transcript archaeology workflow.
 WhenToUse: When continuing the demo recovery investigation or rerunning the minitrace scripts.
 ---
+
 
 
 
@@ -1224,3 +1233,71 @@ ui/src/features/doc/widgets/CommitWalkWidget.tsx
 - Endpoint response shapes intentionally mirror `ui/src/api/sourceApi.ts` and `ui/src/api/xrefApi.ts`.
 - `queryRefRecordsInFileRange` uses byte offsets to select references contained inside a symbol body.
 - `groupRefUses` uses a `(toSymbolId, kind)` key and preserves occurrence order.
+
+## Step 14: Remove frontend sql.js provider selection and runtime files
+
+This step moved the React app from a dual live-or-sql.js data layer to a backend-only data layer. The browser API slices now call `LiveApiProvider` methods directly, and the sql.js provider implementation, tests, runtime helpers, and package dependencies were removed.
+
+The key behavior change is intentional: if the Go API is unavailable, interactive data queries now fail visibly instead of silently downloading and opening `db/codebase.db` in the browser.
+
+### Prompt Context
+
+**User prompt (verbatim):** (same as Step 13)
+
+**Assistant interpretation:** Remove the frontend sql.js runtime after backend API coverage exists, and keep the work committed with validation.
+
+**Inferred user intent:** Prevent all browser-side SQLite database downloads and make the live Go server the single query runtime.
+
+**Commit (code):** 862cee25abca7f645b36fb8c663019c2c2332e9b — "ui: remove frontend sqljs data runtime"
+
+### What I did
+- Simplified `ui/src/api/codebaseProvider.ts` to expose `apiProvider()`/`liveProvider()` only; removed `liveOrSql`, `liveWithSqlFallback`, and `sqlProvider`.
+- Updated `indexApi`, `docApi`, `sourceApi`, `historyApi`, and `xrefApi` to call the live provider directly.
+- Added live provider methods for `/api/xref`, `/api/snippet-refs`, `/api/source-refs`, and `/api/file-xref`.
+- Removed `ui/src/api/sqlJsQueryProvider.ts`, `ui/src/api/sqlJsQueryProvider.test.ts`, and `ui/src/api/sqljs/*`.
+- Removed `sql.js` and `@types/sql.js` from `ui/package.json` and refreshed `ui/pnpm-lock.yaml` with `pnpm -C ui install --lockfile-only`.
+- Ran `pnpm -C ui run typecheck` successfully.
+- Ran `go test ./internal/server ./internal/docs ./internal/staticapp -count=1` successfully.
+
+### Why
+- The remaining fallback helpers could still initialize sql.js and fetch the static database when the live API probe failed.
+- Deleting the implementation and package dependency makes accidental fallback impossible in production frontend code.
+
+### What worked
+- `rg -n "liveOrSql|liveWithSqlFallback|sqlProvider|getSqlJsProvider|SqlJsQueryProvider|sqlJs|sqljs|sql\.js|sql-wasm|db/codebase" ui/src ui/package.json ui/pnpm-lock.yaml` returned no matches after the deletion.
+- TypeScript accepted the backend-only provider surface.
+- Focused Go tests continued to pass.
+
+### What didn't work
+- N/A. The dependency removal produced only existing peer-dependency warnings from Storybook packages:
+  - `@storybook/react 8.6.18` expects `@storybook/test@8.6.18` but `8.6.15` is installed.
+  - `@storybook/react-vite 8.6.18` expects `@storybook/test@8.6.18` but `8.6.15` is installed.
+
+### What I learned
+- `xrefApi` was the last direct `getSqlJsProvider()` caller.
+- `sourceApi` was relying on sql.js-only methods for snippet refs, source refs, and file xrefs, which justified adding the backend endpoints first.
+
+### What was tricky to build
+- The frontend had a benign-looking provider abstraction, but it encoded an important runtime behavior: live API failure caused a silent fallback to browser SQLite.
+- Removing the fallback required changing all RTK slices consistently; leaving a single import would have kept the sql.js provider reachable through the bundle.
+
+### What warrants a second pair of eyes
+- Review UI behavior when `/api/health` or a data endpoint is unavailable. The new behavior is fail-fast/backend-only, which is intended but changes the old static fallback semantics.
+- Review whether `liveProvider()` should be kept as a compatibility alias or removed in a later cleanup once all call sites standardize on `apiProvider()`.
+
+### What should be done in the future
+- Add an explicit browser/network smoke test to fail on `db/codebase.db`, `sql-wasm.wasm`, or sql.js requests.
+- Rebuild the demo bundle and redeploy yolo with the no-sql.js frontend.
+
+### Code review instructions
+- Start with `ui/src/api/codebaseProvider.ts` to confirm no fallback selector remains.
+- Then inspect each API slice under `ui/src/api/` to confirm calls go through `apiProvider()`.
+- Check `ui/src/api/liveApiProvider.ts` for the new xref/ref methods.
+- Validate with:
+  - `rg -n "liveOrSql|liveWithSqlFallback|sqlProvider|getSqlJsProvider|SqlJsQueryProvider|sqlJs|sqljs|sql\.js|sql-wasm|db/codebase" ui/src ui/package.json ui/pnpm-lock.yaml`
+  - `pnpm -C ui run typecheck`
+  - `go test ./internal/server ./internal/docs ./internal/staticapp -count=1`
+
+### Technical details
+- `getImpact` and commit-scoped snippet/source hydration are now backend-only too; the previously-added live impact endpoint is part of this removal commit because the UI fallback path disappeared.
+- Removing `sql.js` from `ui/package.json` also removed the lockfile package entries for `sql.js@1.14.1` and `@types/sql.js@1.4.11`.

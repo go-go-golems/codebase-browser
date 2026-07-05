@@ -127,3 +127,14 @@ Added live backend xref, snippet-ref, source-ref, and file-xref endpoints with t
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/internal/server/api_xref.go — New backend handlers and SQLite queries
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/internal/server/server_test.go — Endpoint tests
 
+
+## 2026-07-05
+
+Migrated React API slices to backend-only data access and removed sql.js provider files/dependencies.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/package.json — Removed sql.js dependencies
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/src/api/codebaseProvider.ts — Removed live/sql fallback selection
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/src/api/liveApiProvider.ts — Added xref/ref live methods
+

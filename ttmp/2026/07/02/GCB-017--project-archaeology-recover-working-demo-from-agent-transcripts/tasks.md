@@ -10,6 +10,6 @@
 - [x] Index a stable multi-commit demo DB and hardcode review doc commit refs
 - [x] Design backend-only frontend data runtime and upload implementation guide to reMarkable
 - [x] Add live backend xref, snippet-ref, source-ref, and file-xref endpoints
-- [ ] Switch React API slices to live backend only and remove sql.js provider selection
-- [ ] Delete sql.js runtime files and dependencies
+- [x] Switch React API slices to live backend only and remove sql.js provider selection
+- [x] Delete sql.js runtime files and dependencies
 - [ ] Rebuild, smoke-test, and redeploy yolo without frontend DB downloads
