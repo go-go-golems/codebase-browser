@@ -94,3 +94,26 @@ Deployed the repaired live demo to yolo via GitOps: built/pushed ghcr.io/go-go-g
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/Dockerfile — Updated image runtime to serve embedded static export with live Go API
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/reference/01-diary.md — Step 11 yolo deployment diary
 
+
+## 2026-07-05
+
+Migrated impact and review-page snippet hydration to live backend APIs, rebuilt/pushed yolo-20260705-backend-impact, and verified public review pages no longer request db/codebase.db/sql-wasm.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/codebase-browser/deployment.yaml — Yolo image updated to backend-impact build
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/internal/server/api_history.go — Live impact endpoint and SQL-backed BFS
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/src/api/historyApi.ts — Impact widget now prefers live backend
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/src/api/liveApiProvider.ts — Live impact and commit-aware snippet/source requests
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ui/src/features/doc/widgets/AnnotationWidget.tsx — Annotation snippets use provider-backed API
+
+
+## 2026-07-05
+
+Wrote and uploaded the backend-only frontend data runtime design guide for removing sql.js from the React app.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/design-doc/01-remove-frontend-sql-js-runtime-design.md — Implementation guide uploaded to reMarkable
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/tasks.md — Added and checked task 7
+

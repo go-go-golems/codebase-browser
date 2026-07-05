@@ -832,3 +832,80 @@ I built a new container image that embeds the current `codebase-browser` binary 
   - `ghcr.io/go-go-golems/codebase-browser:yolo-20260704-solid-demo`
 - Image digest:
   - `sha256:22a8fc682e28dc702f0c5ce7c3c78442e74c80b9015dee5d49fe41437ad3dddf`
+
+## Step 12: Move impact and commit snippet hydration off the frontend SQLite database
+
+I migrated the remaining review-page impact lookup to the live Go backend so the browser no longer needs to fetch `db/codebase.db` just to render `02-symbol-history-and-impact`. While checking that path, I also found direct sql.js snippet calls in annotation/commit-snippet hydration, so I moved those through the existing provider layer and added commit-aware live snippet/source requests.
+
+The yolo deployment now serves a new image with backend impact support. Browser network validation on the public review pages showed `/api/history/impact` and `/api/snippet` requests, with no `db/codebase.db` or `sql-wasm` requests for the review pages tested.
+
+### Prompt Context
+
+**User prompt (verbatim):** "We seem to still load the full DB on the frontend, for example here: https://codebase-browser.yolo.scapegoat.dev/#/review/02-symbol-history-and-impact to answer the impact query. That should also be migrated to the backend, there should be no need to access the sqlite DB at all in the frontend"
+
+**Assistant interpretation:** Eliminate frontend SQLite loading for live-server review pages, starting with the impact widget, and redeploy the yolo demo.
+
+**Inferred user intent:** The public demo should use the backend API for data queries rather than making users download a large SQLite database in the browser.
+
+### What I did
+- Added live backend endpoint:
+  - `GET /api/history/impact?symbol=...&direction=usedby|uses&depth=N&commit=...`
+- Ported the impact BFS from the sql.js provider into Go against `snapshot_refs` and `snapshot_symbols`.
+- Wired `historyApi.getImpact` to prefer the live provider and fall back to sql.js only in purely static mode.
+- Made live source/snippet provider methods accept optional `commit=`.
+- Updated `AnnotationWidget` to use `sourceApi.useGetSnippetQuery` instead of `getSqlJsProvider()` directly.
+- Updated `DocSnippet` commit signature/snippet hydration to use RTK/provider-backed snippet queries instead of direct sql.js access.
+- Rebuilt the solid demo, rebuilt and pushed image:
+  - `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-backend-impact`
+  - digest `sha256:240714c62ab47a11021d1c1cb9b10a01bcbea2e2d9139ad4439d5d1c4a75482c`
+- Updated the yolo GitOps deployment image and pushed GitOps commit:
+  - `cd435b7` — `Deploy backend impact codebase-browser demo`
+- ArgoCD then advanced to `a996fae588c32d45b4d3d1ef1a5f20e8410db1cc` after another GitOps commit and remained `Synced` / `Healthy`.
+
+### Why
+- Downloading the 225MB SQLite database in the frontend defeats the purpose of running the live Go API. It is acceptable for static exports, but not for the yolo live deployment.
+
+### What worked
+- `go test ./internal/server ./internal/docs ./internal/staticapp -count=1` passed.
+- `pnpm -C ui run typecheck` passed.
+- Local `/api/history/impact` returned the expected two-node impact chain for `history.newScanCmd`.
+- Public yolo `/api/history/impact` returned a 200 response with impact nodes.
+- Playwright network checks on the public review pages saw no `db/codebase.db` or `sql-wasm` requests; review widgets used `/api/history/impact` and `/api/snippet` instead.
+- ArgoCD reports `codebase-browser` as `Synced` / `Healthy`.
+
+### What didn't work
+- `make demo-serve` briefly failed because port `3003` was already occupied during the restart check. Starting the server manually confirmed the updated local server was healthy.
+
+### What I learned
+- The impact widget was not the only sql.js path on review pages: annotation and commit-snippet hydration had direct provider calls too.
+- Static mode still needs sql.js fallback, but live mode can avoid database downloads for the review/demo paths we exercised.
+
+### What was tricky to build
+- The Go impact endpoint had to preserve the frontend response shape exactly (`root`, `direction`, `depth`, `commit`, `nodes`, `edges`) while translating the TypeScript BFS into SQL-backed Go helpers.
+- Playwright request listeners can accumulate across repeated `run_code` calls, so the useful validation signal is whether any `db/codebase` or `sql-wasm` request appears, not the full repeated list of API requests.
+
+### What warrants a second pair of eyes
+- `xrefApi`, `getSnippetRefs`, `getSourceRefs`, and `getFileXref` still have sql.js fallback/provider code. They may still download the DB on non-review interactive symbol/source pages unless those paths are migrated too.
+- The yolo image was built from the current working tree before the codebase-browser changes were committed; split and commit those changes for reproducibility.
+
+### What should be done in the future
+- Add live backend endpoints for xrefs, snippet refs, source refs, and file xrefs, then make the live UI never initialize sql.js unless the backend is unavailable.
+- Add a browser smoke assertion that fails if `db/codebase.db` or `sql-wasm.wasm` is requested while `/api/health` reports `live-go`.
+
+### Code review instructions
+- Start with:
+  - `internal/server/api_history.go` (`handleImpact`, `queryImpact`, `queryImpactEdges`)
+  - `ui/src/api/liveApiProvider.ts` (`getImpact`, commit-aware source/snippet methods)
+  - `ui/src/api/historyApi.ts` (`getImpact` live-first provider selection)
+  - `ui/src/features/doc/widgets/AnnotationWidget.tsx` and `ui/src/features/doc/DocSnippet.tsx` (no direct sql.js snippet hydration)
+- Validate with:
+  - `go test ./internal/server ./internal/docs ./internal/staticapp -count=1`
+  - `pnpm -C ui run typecheck`
+  - `curl -fsS 'https://codebase-browser.yolo.scapegoat.dev/api/history/impact?symbol=sym%3Agithub.com%2Fwesen%2Fcodebase-browser%2Fcmd%2Fcodebase-browser%2Fcmds%2Fhistory.func.newScanCmd&direction=usedby&depth=2'`
+  - Browser network check on `/review/02-symbol-history-and-impact` for absence of `db/codebase.db` and `sql-wasm`.
+
+### Technical details
+- Public impact API validation:
+  - `impact=2 Register`
+- Active yolo image:
+  - `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-backend-impact`

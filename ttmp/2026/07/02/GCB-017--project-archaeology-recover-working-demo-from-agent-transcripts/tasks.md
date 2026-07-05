@@ -8,3 +8,8 @@
 - [x] Restore a live Go server command backed by the review SQLite database
 - [x] Make React data layer prefer the live Go API when /api/health is available
 - [x] Index a stable multi-commit demo DB and hardcode review doc commit refs
+- [x] Design backend-only frontend data runtime and upload implementation guide to reMarkable
+- [ ] Add live backend xref, snippet-ref, source-ref, and file-xref endpoints
+- [ ] Switch React API slices to live backend only and remove sql.js provider selection
+- [ ] Delete sql.js runtime files and dependencies
+- [ ] Rebuild, smoke-test, and redeploy yolo without frontend DB downloads
