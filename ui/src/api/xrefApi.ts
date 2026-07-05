@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
+import { apiProvider } from './codebaseProvider';
 import { normalizeQueryError } from './queryErrors';
-import { getSqlJsProvider } from './sqlJsQueryProvider';
 import type { Range } from './types';
 
 export interface RefRecord {
@@ -42,7 +42,7 @@ export const xrefApi = createApi({
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
     getXref: b.query<XrefResponse, string>({
-      queryFn: (id) => providerResult(() => getSqlJsProvider().getXref(id)),
+      queryFn: (id) => providerResult(() => apiProvider().getXref(id)),
     }),
   }),
 });

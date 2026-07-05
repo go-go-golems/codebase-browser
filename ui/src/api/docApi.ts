@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { normalizeQueryError } from './queryErrors';
-import { liveOrSql, liveProvider, sqlProvider } from './codebaseProvider';
+import { apiProvider } from './codebaseProvider';
 
 export interface SnippetRef {
   stubId: string;
@@ -54,13 +54,13 @@ export const docApi = createApi({
       queryFn: async () => ({ data: [] }),
     }),
     getDoc: b.query<DocPage, string>({
-      queryFn: (slug) => providerResult(() => liveOrSql(() => liveProvider().getReviewDoc(slug), () => sqlProvider().getReviewDoc(slug))),
+      queryFn: (slug) => providerResult(() => apiProvider().getReviewDoc(slug)),
     }),
     listReviewDocs: b.query<ReviewDocMeta[], void>({
-      queryFn: () => providerResult(() => liveOrSql(() => liveProvider().listReviewDocs(), () => sqlProvider().listReviewDocs())),
+      queryFn: () => providerResult(() => apiProvider().listReviewDocs()),
     }),
     getReviewDoc: b.query<DocPage, string>({
-      queryFn: (slug) => providerResult(() => liveOrSql(() => liveProvider().getReviewDoc(slug), () => sqlProvider().getReviewDoc(slug))),
+      queryFn: (slug) => providerResult(() => apiProvider().getReviewDoc(slug)),
     }),
   }),
 });

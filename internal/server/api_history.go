@@ -76,6 +76,31 @@ type symbolHistoryRow struct {
 	Kind       string `json:"kind"`
 }
 
+type impactEdge struct {
+	FromSymbolID string `json:"fromSymbolId"`
+	ToSymbolID   string `json:"toSymbolId"`
+	Kind         string `json:"kind"`
+	FileID       string `json:"fileId"`
+}
+
+type impactNode struct {
+	SymbolID      string       `json:"symbolId"`
+	Name          string       `json:"name"`
+	Kind          string       `json:"kind"`
+	Depth         int          `json:"depth"`
+	Edges         []impactEdge `json:"edges"`
+	Compatibility string       `json:"compatibility"`
+	Local         bool         `json:"local"`
+}
+
+type impactResponse struct {
+	Root      string       `json:"root"`
+	Direction string       `json:"direction"`
+	Depth     int          `json:"depth"`
+	Commit    string       `json:"commit"`
+	Nodes     []impactNode `json:"nodes"`
+}
+
 func (s *Server) handleHistoryCommits(w http.ResponseWriter, r *http.Request) {
 	db, ok := s.requireDB(w)
 	if !ok {
@@ -160,6 +185,164 @@ ORDER BY c.author_time DESC`
 		return
 	}
 	writeJSON(w, out)
+}
+
+func (s *Server) handleImpact(w http.ResponseWriter, r *http.Request) {
+	db, ok := s.requireDB(w)
+	if !ok {
+		return
+	}
+	symbolID := r.URL.Query().Get("symbol")
+	if symbolID == "" {
+		symbolID = r.URL.Query().Get("id")
+	}
+	if symbolID == "" {
+		writeJSONError(w, http.StatusBadRequest, "missing symbol")
+		return
+	}
+	direction := r.URL.Query().Get("direction")
+	if direction == "" {
+		direction = r.URL.Query().Get("dir")
+	}
+	if direction == "" {
+		direction = "usedby"
+	}
+	if direction != "usedby" && direction != "uses" {
+		writeJSONError(w, http.StatusBadRequest, "direction must be usedby or uses")
+		return
+	}
+	depth := 2
+	if rawDepth := r.URL.Query().Get("depth"); rawDepth != "" {
+		parsed, err := strconv.Atoi(rawDepth)
+		if err != nil || parsed < 1 {
+			writeJSONError(w, http.StatusBadRequest, "bad depth")
+			return
+		}
+		depth = parsed
+	}
+	if depth > 5 {
+		depth = 5
+	}
+	commit, err := s.resolveCommit(r.URL.Query().Get("commit"))
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	resp, err := queryImpact(r.Context(), db, commit, symbolID, direction, depth)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, resp)
+}
+
+func queryImpact(ctx context.Context, db *sql.DB, commit, root, direction string, maxDepth int) (impactResponse, error) {
+	visited := map[string]bool{root: true}
+	queue := []struct {
+		symbolID string
+		depth    int
+	}{{symbolID: root, depth: 0}}
+	nodeByID := map[string]*impactNode{}
+	order := []string{}
+
+	for len(queue) > 0 {
+		item := queue[0]
+		queue = queue[1:]
+		if item.depth >= maxDepth {
+			continue
+		}
+		edges, err := queryImpactEdges(ctx, db, commit, item.symbolID, direction)
+		if err != nil {
+			return impactResponse{}, err
+		}
+		for _, edge := range edges {
+			nextID := edge.FromSymbolID
+			if direction == "uses" {
+				nextID = edge.ToSymbolID
+			}
+			nextDepth := item.depth + 1
+			node := nodeByID[nextID]
+			if node == nil {
+				name, kind, local, err := querySymbolMeta(ctx, db, commit, nextID)
+				if err != nil {
+					return impactResponse{}, err
+				}
+				node = &impactNode{
+					SymbolID:      nextID,
+					Name:          name,
+					Kind:          kind,
+					Depth:         nextDepth,
+					Edges:         []impactEdge{},
+					Compatibility: "unknown",
+					Local:         local,
+				}
+				nodeByID[nextID] = node
+				order = append(order, nextID)
+			}
+			node.Edges = append(node.Edges, edge)
+			if !visited[nextID] {
+				visited[nextID] = true
+				queue = append(queue, struct {
+					symbolID string
+					depth    int
+				}{symbolID: nextID, depth: nextDepth})
+			}
+		}
+	}
+
+	nodes := make([]impactNode, 0, len(order))
+	for _, id := range order {
+		nodes = append(nodes, *nodeByID[id])
+	}
+	return impactResponse{Root: root, Direction: direction, Depth: maxDepth, Commit: commit, Nodes: nodes}, nil
+}
+
+func queryImpactEdges(ctx context.Context, db *sql.DB, commit, symbolID, direction string) ([]impactEdge, error) {
+	column := "to_symbol_id"
+	orderBy := "from_symbol_id, kind"
+	if direction == "uses" {
+		column = "from_symbol_id"
+		orderBy = "to_symbol_id, kind"
+	}
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
+SELECT from_symbol_id, to_symbol_id, kind, file_id
+FROM snapshot_refs
+WHERE commit_hash = ? AND %s = ?
+ORDER BY %s`, column, orderBy), commit, symbolID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []impactEdge{}
+	for rows.Next() {
+		var edge impactEdge
+		if err := rows.Scan(&edge.FromSymbolID, &edge.ToSymbolID, &edge.Kind, &edge.FileID); err != nil {
+			return nil, err
+		}
+		out = append(out, edge)
+	}
+	return out, rows.Err()
+}
+
+func querySymbolMeta(ctx context.Context, db *sql.DB, commit, symbolID string) (name, kind string, local bool, err error) {
+	err = db.QueryRowContext(ctx, `
+SELECT name, kind
+FROM snapshot_symbols
+WHERE commit_hash = ? AND id = ?`, commit, symbolID).Scan(&name, &kind)
+	if err == sql.ErrNoRows {
+		return fallbackName(symbolID), "external", false, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	return name, kind, true, nil
+}
+
+func fallbackName(symbolID string) string {
+	if idx := strings.LastIndex(symbolID, "."); idx >= 0 && idx < len(symbolID)-1 {
+		return symbolID[idx+1:]
+	}
+	return symbolID
 }
 
 func (s *Server) handleHistoryDiff(w http.ResponseWriter, r *http.Request) {

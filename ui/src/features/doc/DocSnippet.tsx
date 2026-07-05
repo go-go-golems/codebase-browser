@@ -1,9 +1,7 @@
 // React namespace provided by jsx: react-jsx
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { useGetSymbolQuery } from '../../api/indexApi';
-import { useGetSourceQuery } from '../../api/sourceApi';
-import { getSqlJsProvider } from '../../api/sqlJsQueryProvider';
+import { useGetSnippetQuery, useGetSourceQuery } from '../../api/sourceApi';
 import { ExpandableSymbol } from '../symbol/ExpandableSymbol';
 import { XrefPanel } from '../symbol/XrefPanel';
 import { Code } from '../../packages/ui/src/Code';
@@ -14,53 +12,6 @@ import { AnnotationWidget } from './widgets/AnnotationWidget';
 import { ChangedFilesWidget } from './widgets/ChangedFilesWidget';
 import { DiffStatsWidget } from './widgets/DiffStatsWidget';
 import { CommitWalkWidget } from './widgets/CommitWalkWidget';
-
-/**
- * useGetSnippetFromCommit fetches a symbol's snippet at a specific commit
- * from the history API. Returns undefined while loading, null on error,
- * or the snippet text string on success. When commit is undefined, returns
- * null immediately (used as a "skip" signal).
- */
-function useGetSnippetFromCommit(
-  sym: string,
-  kind: string,
-  commit?: string,
-): string | null | undefined {
-  // No commit specified → not a history-aware request.
-  if (!commit) return null;
-
-  // We use a synchronous fetch pattern to keep the hook simple.
-  // RTK-Query with dynamic base URL would be cleaner, but for Slice 0
-  // this direct fetch keeps the blast radius minimal.
-  const cache = React.useRef<Map<string, string | null>>(new Map());
-  const key = `${sym}|${kind}|${commit}`;
-  const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
-
-  React.useEffect(() => {
-    if (cache.current.has(key)) return;
-    // Mark as "loading" by setting undefined (not in cache).
-    // We use a sentinel to track in-flight requests.
-    let cancelled = false;
-    getSqlJsProvider()
-      .getSnippet(sym, kind, commit)
-      .then((text) => {
-        if (cancelled) return;
-        cache.current.set(key, text);
-        forceUpdate();
-      })
-      .catch(() => {
-        if (cancelled) return;
-        cache.current.set(key, null);
-        forceUpdate();
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [key, sym, kind, commit]);
-
-  if (!cache.current.has(key)) return undefined; // loading
-  return cache.current.get(key);
-}
 
 /**
  * DocSnippet hydrates one `[data-codebase-snippet]` stub on a doc page.
@@ -165,7 +116,7 @@ function languageForPath(path: string): string {
 
 function DocSignature({ sym, commit, language }: { sym: string; commit?: string; language?: string }) {
   const { data } = useGetSymbolQuery(sym);
-  const snippet = useGetSnippetFromCommit(sym, 'signature', commit);
+  const { data: snippet } = useGetSnippetQuery({ sym, kind: 'signature', commit }, { skip: !commit });
   const display = commit ? (snippet ?? data?.signature ?? data?.name ?? sym) : (data?.signature ?? data?.name ?? sym);
   if (commit) {
     return <Code text={display} language={language || 'go'} />;
@@ -198,9 +149,9 @@ function DocGodoc({ sym, commit: _commit }: { sym: string; commit?: string }) {
 // callers and callees without leaving the doc page.
 function DocFullSnippet({ sym, commit, language }: { sym: string; commit?: string; language?: string }) {
   const { data: symbol } = useGetSymbolQuery(sym);
-  const commitSnippet = useGetSnippetFromCommit(sym, 'declaration', commit);
+  const { data: commitSnippet, isLoading: commitSnippetLoading } = useGetSnippetQuery({ sym, kind: 'declaration', commit }, { skip: !commit });
 
-  if (commit && commitSnippet === undefined) {
+  if (commit && commitSnippetLoading) {
     return (
       <pre data-part="code-block">
         <code>Loading snippet at commit {commit.slice(0, 7)}…</code>

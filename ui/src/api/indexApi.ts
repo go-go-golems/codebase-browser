@@ -1,6 +1,6 @@
 import { createApi, type BaseQueryFn } from '@reduxjs/toolkit/query/react';
 import { normalizeQueryError } from './queryErrors';
-import { liveOrSql, liveProvider, sqlProvider } from './codebaseProvider';
+import { apiProvider } from './codebaseProvider';
 import type { IndexSummary, PackageLite, Symbol } from './types';
 
 type ProviderError = { status: string; data?: string };
@@ -22,19 +22,19 @@ export const indexApi = createApi({
   keepUnusedDataFor: 3600,
   endpoints: (b) => ({
     getIndex: b.query<IndexSummary, void>({
-      queryFn: () => providerResult(() => liveOrSql(() => liveProvider().getIndex(), () => sqlProvider().getIndex())),
+      queryFn: () => providerResult(() => apiProvider().getIndex()),
       providesTags: ['Index'],
     }),
     getPackages: b.query<PackageLite[], void>({
-      queryFn: () => providerResult(() => liveOrSql(() => liveProvider().getPackageLites(), () => sqlProvider().getPackageLites())),
+      queryFn: () => providerResult(() => apiProvider().getPackageLites()),
       providesTags: ['Package'],
     }),
     getSymbol: b.query<Symbol, string>({
-      queryFn: (id) => providerResult(() => liveOrSql(() => liveProvider().getSymbol(id), () => sqlProvider().getSymbol(id))),
+      queryFn: (id) => providerResult(() => apiProvider().getSymbol(id)),
       providesTags: (_r, _e, id) => [{ type: 'Symbol', id }],
     }),
     searchSymbols: b.query<Symbol[], { q: string; kind?: string }>({
-      queryFn: ({ q, kind }) => providerResult(() => liveOrSql(() => liveProvider().searchSymbols(q, kind ?? ''), () => sqlProvider().searchSymbols(q, kind ?? ''))),
+      queryFn: ({ q, kind }) => providerResult(() => apiProvider().searchSymbols(q, kind ?? '')),
     }),
   }),
 });

@@ -1,8 +1,9 @@
 import { QueryError } from './queryErrors';
 import type { DocPage, ReviewDocMeta } from './docApi';
-import type { BodyDiffResult, CommitDiff, CommitRow, SymbolHistoryEntry } from './historyApi';
-import type { SnippetKind } from './sourceApi';
+import type { BodyDiffResult, CommitDiff, CommitRow, ImpactResponse, SymbolHistoryEntry } from './historyApi';
+import type { FileXrefResponse, SnippetKind, SnippetRefView, SourceRefView } from './sourceApi';
 import type { IndexSummary, PackageLite, Symbol } from './types';
+import type { XrefResponse } from './xrefApi';
 
 let liveAvailablePromise: Promise<boolean> | null = null;
 
@@ -118,13 +119,40 @@ export class LiveApiProvider {
     return (await fetchJSON<any[]>(`/api/search?${params}`)).map(normalizeSymbol);
   }
 
-  async getSource(path: string): Promise<string> {
-    return fetchText(`/api/source?path=${encodeURIComponent(path)}`);
+  async getSource(path: string, commit?: string): Promise<string> {
+    const params = new URLSearchParams({ path });
+    if (commit) params.set('commit', commit);
+    return fetchText(`/api/source?${params}`);
   }
 
-  async getSnippet(symbolId: string, kind: SnippetKind = 'declaration'): Promise<string> {
+  async getSnippet(symbolId: string, kind: SnippetKind = 'declaration', commit?: string): Promise<string> {
     const params = new URLSearchParams({ symbol: symbolId, kind });
+    if (commit) params.set('commit', commit);
     return fetchText(`/api/snippet?${params}`);
+  }
+
+  async getSnippetRefs(symbolId: string, commit?: string): Promise<SnippetRefView[]> {
+    const params = new URLSearchParams({ symbol: symbolId });
+    if (commit) params.set('commit', commit);
+    return fetchJSON(`/api/snippet-refs?${params}`);
+  }
+
+  async getSourceRefs(path: string, commit?: string): Promise<SourceRefView[]> {
+    const params = new URLSearchParams({ path });
+    if (commit) params.set('commit', commit);
+    return fetchJSON(`/api/source-refs?${params}`);
+  }
+
+  async getFileXref(path: string, commit?: string): Promise<FileXrefResponse> {
+    const params = new URLSearchParams({ path });
+    if (commit) params.set('commit', commit);
+    return fetchJSON(`/api/file-xref?${params}`);
+  }
+
+  async getXref(symbolId: string, commit?: string): Promise<XrefResponse> {
+    const params = new URLSearchParams({ id: symbolId });
+    if (commit) params.set('commit', commit);
+    return fetchJSON(`/api/xref?${params}`);
   }
 
   async listReviewDocs(): Promise<ReviewDocMeta[]> {
@@ -161,6 +189,12 @@ export class LiveApiProvider {
   async getSymbolBodyDiff(from: string, to: string, symbolId: string): Promise<BodyDiffResult> {
     const params = new URLSearchParams({ from, to, symbol: symbolId });
     return fetchJSON(`/api/history/symbol-body-diff?${params}`);
+  }
+
+  async getImpact(options: { symbolId: string; direction: 'usedby' | 'uses'; depth: number; commit?: string }): Promise<ImpactResponse> {
+    const params = new URLSearchParams({ symbol: options.symbolId, direction: options.direction, depth: String(options.depth) });
+    if (options.commit) params.set('commit', options.commit);
+    return fetchJSON(`/api/history/impact?${params}`);
   }
 }
 
