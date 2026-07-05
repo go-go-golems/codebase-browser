@@ -117,3 +117,13 @@ Wrote and uploaded the backend-only frontend data runtime design guide for remov
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/design-doc/01-remove-frontend-sql-js-runtime-design.md — Implementation guide uploaded to reMarkable
 - /home/manuel/code/wesen/2026-04-19--go-codebase-browser/ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/tasks.md — Added and checked task 7
 
+
+## 2026-07-05
+
+Added live backend xref, snippet-ref, source-ref, and file-xref endpoints with tests.
+
+### Related Files
+
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/internal/server/api_xref.go — New backend handlers and SQLite queries
+- /home/manuel/code/wesen/2026-04-19--go-codebase-browser/internal/server/server_test.go — Endpoint tests
+

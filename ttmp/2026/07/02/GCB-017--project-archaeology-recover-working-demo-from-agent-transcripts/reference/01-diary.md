@@ -22,8 +22,14 @@ RelatedFiles:
       Note: Step 4 restored Go-side SQLite APIs
     - Path: internal/server/api_history.go
       Note: Step 6 live diff API
+    - Path: internal/server/api_xref.go
+      Note: Live backend endpoints replacing sql.js-only xref/ref queries
+    - Path: internal/server/server.go
+      Note: Registered xref/ref routes
     - Path: internal/server/server_test.go
-      Note: Step 4 validation coverage
+      Note: |-
+        Step 4 validation coverage
+        Fixture coverage for xref/ref endpoints
     - Path: ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/analysis/01-transcript-archaeology-findings.md
       Note: Primary findings synthesized from the transcript archaeology
     - Path: ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts/scripts/05-demo-recovery-files.sql
@@ -36,6 +42,7 @@ LastUpdated: 2026-07-02T23:35:00Z
 WhatFor: Use this to resume or review the transcript archaeology workflow.
 WhenToUse: When continuing the demo recovery investigation or rerunning the minitrace scripts.
 ---
+
 
 
 
@@ -909,3 +916,311 @@ The yolo deployment now serves a new image with backend impact support. Browser 
   - `impact=2 Register`
 - Active yolo image:
   - `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-backend-impact`
+
+## Step 13: Add backend xref endpoints before deleting sql.js
+
+This step closed the largest backend API gap that prevented removal of the frontend SQLite runtime. The live Go server now exposes xref, snippet-reference, source-reference, and file-xref endpoints whose response shapes match the existing React contracts.
+
+I implemented this before touching frontend provider selection so the UI can move one endpoint family at a time from sql.js to HTTP without losing widget behavior.
+
+### Prompt Context
+
+**User prompt (verbatim):** "The conversation history before this point was compacted into the following summary:
+
+<summary>
+## Goal
+Restore a working `codebase-browser` live Go demo, make the React UI use the Go API when available, build stable history-rich review docs that do not depend on moving `HEAD~N` refs, and deploy the demo publicly to yolo without frontend SQLite DB downloads for review pages.
+
+## Constraints & Preferences
+- Use `go-minitrace` transcript archaeology and keep work under docmgr ticket `GCB-017`.
+- Store reusable SQL/JS scripts in the ticket `scripts/` folder.
+- Keep a diary while working.
+- Hardcode commit versions so reports do not go out of date.
+- Prefer Go API queries for the React UI when served live.
+- In live mode, review/demo pages should not fetch `db/codebase.db` or initialize `sql-wasm`.
+
+## Progress
+### Done
+- [x] Created ticket `GCB-017` at `ttmp/2026/07/02/GCB-017--project-archaeology-recover-working-demo-from-agent-transcripts`.
+- [x] Converted six Pi transcripts into `archive/minitrace/active/*/*.minitrace.json`.
+- [x] Wrote transcript analysis scripts under `ttmp/.../scripts/`.
+- [x] Restored `codebase-browser serve` in `cmd/codebase-browser/cmds/serve/run.go` and registered it in `cmd/codebase-browser/main.go`.
+- [x] Added live Go API in `internal/server/*`, including review docs, source/snippet, history diff, body diff, commit list, symbol history, and impact endpoints.
+- [x] Added React live API provider:
+  - `ui/src/api/liveApiProvider.ts`
+  - `ui/src/api/codebaseProvider.ts`
+  - updated `ui/src/api/indexApi.ts`, `docApi.ts`, `sourceApi.ts`, `historyApi.ts`
+- [x] Fixed package-local refs like `staticapp.Export` in `internal/docs/renderer.go`.
+- [x] Hardcoded stable demo refs in `examples/01-pr-review-static-export.md`, `examples/02-symbol-history-and-impact.md`, `examples/03-commit-walk-walkthrough.md`.
+- [x] Built stable rich demo range `025e4c6..79af1b0`:
+  - DB: `/tmp/gcb-solid-demo.db`
+  - export: `/tmp/gcb-solid-demo`
+  - 118 commits
+  - 0 rendered review-doc errors
+- [x] Restarted local live server on `http://127.0.0.1:3003` using `/tmp/gcb-solid-demo/db/codebase.db`.
+- [x] Fixed broken hydrated review widgets:
+  - commit-walk `overview`, `note`, `symbol`
+  - inherited walk `from/to/commit`
+  - live `/api/history/symbol-body-diff`
+  - `codebase-file` hydration
+  - visible commit-walk “Guide note” callouts
+- [x] Updated `examples/02-symbol-history-and-impact.md` to use richer `history.newScanCmd` demo with 20 rows, 3 body changes, explicit diff `05f3ffe → 7c095d0`, and impact.
+- [x] Added Makefile targets:
+  - `demo-solid`
+  - `demo-serve`
+  - `demo-solid-serve`
+  - `demo-smoke`
+  - updated `docs-smoke` to use `DEMO_COMMITS ?= 025e4c6..79af1b0`
+- [x] Validated:
+  - `go test ./internal/server ./internal/docs ./internal/staticapp -count=1`
+  - `pnpm -C ui run typecheck`
+  - `make demo-smoke`
+  - `make docs-smoke`
+  - Playwright review-page smoke checks
+  - `docmgr doctor --ticket GCB-017 --stale-after 30`
+- [x] Updated runtime packaging:
+  - `Dockerfile` now serves embedded `bin/static` with `serve --db /app/static/db/codebase.db --static-dir /app/static`
+  - `.dockerignore` includes `bin/static/**`
+- [x] Deployed to yolo:
+  - public URL: `https://codebase-browser.yolo.scapegoat.dev/`
+  - GitOps repo: `/home/manuel/code/wesen/2026-03-27--hetzner-k3s`
+  - app path: `gitops/kustomize/codebase-browser/deployment.yaml`
+  - ArgoCD app: `codebase-browser`
+- [x] Fixed old yolo deployment:
+  - old pod was nginx/static and failed probes with `/api/index` 404
+  - probes changed to `/api/health`
+  - memory raised to request `256Mi`, limit `768Mi`
+- [x] Pushed yolo images:
+  - `ghcr.io/go-go-golems/codebase-browser:yolo-20260704-solid-demo`
+  - `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-backend-impact`
+- [x] Pushed GitOps commits:
+  - `bc92125 Deploy codebase-browser live demo image`
+  - `cd435b7 Deploy backend impact codebase-browser demo`
+  - current Argo revision later advanced to `a996fae588c32d45b4d3d1ef1a5f20e8410db1cc`
+- [x] Migrated impact and review-page snippet hydration off frontend SQLite:
+  - backend endpoint `GET /api/history/impact`
+  - `historyApi.getImpact` live-first
+  - `AnnotationWidget` uses provider-backed `useGetSnippetQuery`
+  - `DocSnippet` commit snippets/signatures use provider-backed queries
+  - live `/api/snippet` and `/api/source` support optional `commit=`
+- [x] Verified yolo:
+  - ArgoCD `Synced / Healthy`
+  - `/api/health` OK
+  - `/api/history/commits` returns 118
+  - `main` symbol history returns 117
+  - `/api/history/impact?...history.func.newScanCmd...` returns impact nodes
+  - Playwright network checks on review pages saw no `db/codebase.db` or `sql-wasm` requests.
+
+### In Progress
+- [ ] Split and commit the large `codebase-browser` working tree changes cleanly.
+- [ ] Migrate remaining non-review sql.js paths for live mode.
+
+### Blocked
+- Full `go test ./...` previously failed due stale generated source snapshots under `internal/sourcefs/embed/source/...` importing `github.com/go-go-golems/codebase-browser/...`; focused tests pass.
+
+## Key Decisions
+- **Restore behavior, not old implementation**: Live server is backed by current SQLite `codebase.db`, not the deleted embedded `index.json`/`internal/web` runtime.
+- **Runtime provider detection**: React probes `/api/health`; if available, it uses Go API, otherwise falls back to sql.js.
+- **Stable demo refs**: Replaced moving `HEAD~N` refs with fixed commits to keep reports reproducible.
+- **Larger history window**: Canonical local demo range is now `025e4c6..79af1b0` with 118 commits.
+- **Package-local symbol refs allowed**: `staticapp.Export` now resolves by package name/import suffix, with ambiguity still treated as an error.
+- **Live demo should avoid frontend DB downloads**: Review pages now use backend impact/snippet APIs; sql.js remains fallback for static export mode.
+- **Yolo deployment via GitOps**: Updated `/home/manuel/code/wesen/2026-03-27--hetzner-k3s` and let ArgoCD roll out instead of manual-only patches.
+- **Health probe path**: Use `/api/health` for Kubernetes probes instead of heavier `/api/index`.
+
+## Next Steps
+1. Commit/split the `codebase-browser` changes, especially server/API, UI provider migration, docs renderer, examples, Makefile, Dockerfile, and `.dockerignore`.
+2. Add live backend endpoints for remaining sql.js fallback paths:
+   - `xrefApi`
+   - `getSnippetRefs`
+   - `getSourceRefs`
+   - `getFileXref`
+3. Add browser smoke test that fails if `db/codebase.db` or `sql-wasm.wasm` is requested while `/api/health` reports `live-go`.
+4. Update GitHub Actions image publishing to build the new `demo-solid` artifact and current `serve --db --static-dir` image.
+5. Decide whether yolo’s large embedded 225MB SQLite DB image is acceptable or should become init-container/PVC/artifact-download based.
+6. Re-run final validation:
+   - `go test ./internal/server ./internal/docs ./internal/staticapp -count=1`
+   - `pnpm -C ui run typecheck`
+   - `make demo-smoke`
+   - public yolo curl checks
+   - `docmgr doctor --ticket GCB-017 --stale-after 30`
+
+## Critical Context
+- Original user-visible errors included:
+  - `line 13: symbol "staticapp.Export" not found`
+  - `line 18: symbol "staticapp.Export" not found`
+  - `line 23: symbol "staticapp.Export" not found`
+  - `line 9: symbol "staticapp.AddRenderedReviewDocs" not found`
+  - `Failed to load changed files: {"status":"NOT_FOUND","data":"commit ref not found: HEAD~5"}`
+  - `Unknown commit walk step kind: overview`
+  - `Unknown commit walk step kind: symbol`
+  - `Failed to load diff: {"status":"NOT_FOUND","data":"commit ref not found: b91c6a3"}`
+  - frontend downloading full SQLite DB for impact on `https://codebase-browser.yolo.scapegoat.dev/#/review/02-symbol-history-and-impact`
+- Stable refs/ranges:
+  - canonical demo range: `025e4c6..79af1b0`
+  - broad review range: `b91c6a3 → 79af1b0`
+  - focused `staticapp.Export` diff: `b91c6a3 → 83dbe40`
+  - focused `history.newScanCmd` diff: `05f3ffe → 7c095d0`
+- Local live server:
+  ```bash
+  ./bin/codebase-browser serve \
+    --addr :3003 \
+    --db /tmp/gcb-solid-demo/db/codebase.db \
+    --static-dir /tmp/gcb-solid-demo
+  ```
+- Public yolo URL:
+  - `https://codebase-browser.yolo.scapegoat.dev/`
+- Active yolo image:
+  - `ghcr.io/go-go-golems/codebase-browser:yolo-20260705-backend-impact`
+- Important modified files include:
+  - `.dockerignore`
+  - `Dockerfile`
+  - `Makefile`
+  - `cmd/codebase-browser/main.go`
+  - `cmd/codebase-browser/cmds/serve/run.go`
+  - `examples/01-pr-review-static-export.md`
+  - `examples/02-symbol-history-and-impact.md`
+  - `examples/03-commit-walk-walkthrough.md`
+  - `internal/docs/renderer.go`
+  - `internal/server/api.go`
+  - `internal/server/api_history.go`
+  - `internal/server/api_review.go`
+  - `internal/server/server.go`
+  - `internal/server/server_test.go`
+  - `ui/src/api/codebaseProvider.ts`
+  - `ui/src/api/docApi.ts`
+  - `ui/src/api/historyApi.ts`
+  - `ui/src/api/indexApi.ts`
+  - `ui/src/api/liveApiProvider.ts`
+  - `ui/src/api/sourceApi.ts`
+  - `ui/src/features/doc/DocSnippet.tsx`
+  - `ui/src/features/doc/widgets/AnnotationWidget.tsx`
+  - `ui/src/features/doc/widgets/CommitWalkWidget.tsx`
+- Current `codebase-browser` repo still has uncommitted implementation/deployment packaging changes and ticket docs.
+- Hetzner K3s repo is pushed; latest visible commits include:
+  - `a996fae retro-obsidian-publish: pull public GHCR images anonymously`
+  - `cd435b7 Deploy backend impact codebase-browser demo`
+  - `0ebec8b Deploy publish-vault memory optimized image`
+
+---
+
+**Turn Context (split turn):**
+
+## Original Request
+User asked to remove all `sql.js` migration/fallback paths, first producing a detailed intern-oriented analysis/design/implementation guide stored in the ticket and uploaded to reMarkable, then implementing task-by-task with a detailed diary and commits at appropriate intervals.
+
+## Early Progress
+- Read project documentation guidance:
+  - Writing style guide from `/home/manuel/.pi/agent/skills/ticket-research-docmgr-remarkable/references/writing-style.md`
+  - Deliverable checklist from `/home/manuel/.pi/agent/skills/ticket-research-docmgr-remarkable/references/deliverable-checklist.md`
+- Confirmed existing ticket `GCB-017` and current docs/tasks using:
+  - `docmgr doc list --ticket GCB-017`
+  - `docmgr task list --ticket GCB-017`
+- Found existing docs:
+  - `analysis/01-transcript-archaeology-findings.md`
+  - `reference/01-diary.md`
+- Existing completed tasks showed prior work had restored a Go live server while keeping React fallback to static `sql.js`.
+
+## Context for Suffix
+- Initial code inspection focused on frontend API provider paths:
+  - `ui/src/api/codebaseProvider.ts` currently chooses live API or `sql.js` fallback via `liveOrSql`, `liveWithSqlFallback`, `liveProvider`, and `sqlProvider`.
+  - `ui/src/api/sqlJsQueryProvider.ts` contains large static SQLite query provider backed by `sql.js`.
+  - `ui/src/api/liveApiProvider.ts` probes `/api/health` and fetches live Go API JSON/text endpoints.
+  - `ui/src/api/sqljs/sqlJsDb.ts` initializes `sql.js`, loads `manifest.json`, fetches static `db/codebase.db`, and exposes static DB helpers.
+  - `ui/src/api/xrefApi.ts` still directly calls `getSqlJsProvider().getXref(id)`.
+- Attempted to read `ui/src/api/db.ts`, but it does not exist.
+- Important implementation direction inferred from prefix:
+  - Remove `sql.js` runtime/static DB fallback from frontend.
+  - Convert API consumers to use live Go provider only.
+  - Delete or stop referencing `sqlJsQueryProvider` and `sqljs` helpers.
+  - Update documentation and diary before/during implementation.
+
+<read-files>
+.gitignore
+/home/manuel/.pi/agent/skills/ticket-research-docmgr-remarkable/references/deliverable-checklist.md
+/home/manuel/.pi/agent/skills/ticket-research-docmgr-remarkable/references/writing-style.md
+/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/applications/codebase-browser.yaml
+/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/codebase-browser/ingress.yaml
+/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/codebase-browser/kustomization.yaml
+cmd/codebase-browser/cmds/serve/run.go
+examples/03-commit-walk-walkthrough.md
+examples/04-file-and-annotation-examples.md
+internal/server/api.go
+internal/server/api_review.go
+ui/package.json
+ui/src/api/codebaseProvider.ts
+ui/src/api/db.ts
+ui/src/api/sqlJsQueryProvider.ts
+ui/src/api/sqljs/sqlJsDb.ts
+ui/src/api/xrefApi.ts
+ui/src/features/doc/widgets/SymbolHistoryInlineWidget.tsx
+ui/src/features/history/HistoryPage.tsx
+</read-files>
+
+<modified-files>
+.dockerignore
+/home/manuel/code/wesen/2026-03-27--hetzner-k3s/gitops/kustomize/codebase-browser/deployment.yaml
+Dockerfile
+Makefile
+examples/02-symbol-history-and-impact.md
+internal/docs/renderer.go
+internal/server/api_history.go
+internal/server/server.go
+ui/src/api/historyApi.ts
+ui/src/api/liveApiProvider.ts
+ui/src/api/sourceApi.ts
+ui/src/features/doc/DocSnippet.tsx
+ui/src/features/doc/widgets/AnnotationWidget.tsx
+ui/src/features/doc/widgets/CommitWalkWidget.tsx
+</modified-files>
+</summary>"
+
+**Assistant interpretation:** Build the missing backend API surface needed to remove sql.js, after first producing and uploading the design guide.
+
+**Inferred user intent:** Make the live demo backend-only from the browser's perspective, while preserving a reviewable trail of design, implementation, validation, and commits.
+
+**Commit (code):** c0e7361f9a9957759d1106a473282d7d0a038eaf — "server: add live xref reference endpoints"
+
+### What I did
+- Added `internal/server/api_xref.go` with `/api/xref`, `/api/snippet-refs`, `/api/source-refs`, and `/api/file-xref` handlers.
+- Registered those handlers in `internal/server/server.go`.
+- Expanded `internal/server/server_test.go` with a `snapshot_refs` fixture and endpoint assertions.
+- Ran `gofmt -w internal/server/api_xref.go internal/server/server.go internal/server/server_test.go`.
+- Ran `go test ./internal/server -count=1` successfully.
+- Checked docmgr task 8 and updated changelog/relations.
+
+### Why
+- `xrefApi`, `getSnippetRefs`, `getSourceRefs`, and `getFileXref` were still sql.js-only, so deleting the frontend SQLite runtime would have broken symbol/source pages.
+- Matching existing frontend response shapes allows the UI migration to be mostly transport-only.
+
+### What worked
+- The backend fixture test passed with grouped `uses`, `usedBy`, snippet-relative offsets, file-relative offsets, and file-level inbound/outbound xref responses.
+- The existing `resolveCommit` helper was reusable for the new endpoints.
+
+### What didn't work
+- N/A. The focused backend test passed on the first full run after adding the route and fixture coverage.
+
+### What I learned
+- The old sql.js provider already had clean query boundaries that could be ported almost one-for-one into Go.
+- The file-xref endpoints need joins against `snapshot_symbols` to distinguish references crossing the file boundary from references internal to the same file.
+
+### What was tricky to build
+- The subtle part was preserving the old grouping semantics: `uses` are grouped by `(toSymbolId, kind)` while `usedBy` remains a flat occurrence list.
+- Snippet reference offsets also require subtracting the symbol body start offset, whereas source reference offsets remain file-relative.
+
+### What warrants a second pair of eyes
+- Review the file boundary SQL in `queryRefRecordsToFileSymbols` and `queryRefRecordsFromFileSymbols`; correctness depends on `snapshot_refs.file_id`, `from_symbol_id`, and `to_symbol_id` being consistently populated.
+- Review whether endpoint names should remain top-level (`/api/snippet-refs`) or be nested under `/api/source/*` before the frontend migration hardens them.
+
+### What should be done in the future
+- Wire these endpoints into `LiveApiProvider` and remove the sql.js calls from `sourceApi` and `xrefApi`.
+
+### Code review instructions
+- Start in `internal/server/api_xref.go`, especially `handleXref`, `handleSnippetRefs`, `handleSourceRefs`, `handleFileXref`, and the six query helpers.
+- Then inspect `internal/server/server_test.go` to see expected response shapes.
+- Validate with `go test ./internal/server -count=1`.
+
+### Technical details
+- Endpoint response shapes intentionally mirror `ui/src/api/sourceApi.ts` and `ui/src/api/xrefApi.ts`.
+- `queryRefRecordsInFileRange` uses byte offsets to select references contained inside a symbol body.
+- `groupRefUses` uses a `(toSymbolId, kind)` key and preserves occurrence order.
