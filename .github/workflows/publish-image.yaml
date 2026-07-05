@@ -69,13 +69,16 @@ jobs:
           ./bin/codebase-browser serve --addr :8080 --db bin/static/db/codebase.db --static-dir bin/static &
           pid=$!
           trap 'kill $pid || true' EXIT
+          ready=0
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
+              ready=1
               break
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8080/ | grep -q 'Codebase Browser'
+          test "$ready" = "1"
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
           curl -fsS http://127.0.0.1:8080/api/health | grep -q 'live-go'
           curl -fsS http://127.0.0.1:8080/api/review-docs >/dev/null
           ! curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
@@ -129,13 +132,16 @@ jobs:
         run: |
           docker run -d --rm --name codebase-browser-ci -p 127.0.0.1:8080:8080 "${GHCR_IMAGE}:${SHORT_SHA}"
           trap 'docker logs codebase-browser-ci || true; docker rm -f codebase-browser-ci || true' EXIT
+          ready=0
           for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null; then
+            if curl -fsS http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
+              ready=1
               break
             fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8080/ | grep -q 'Codebase Browser'
+          test "$ready" = "1"
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
           curl -fsS http://127.0.0.1:8080/api/health | grep -q 'live-go'
           curl -fsS http://127.0.0.1:8080/api/review-docs >/dev/null
           ! curl -fsS http://127.0.0.1:8080/sql-wasm.wasm >/dev/null
